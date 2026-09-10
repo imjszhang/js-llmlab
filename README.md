@@ -97,6 +97,7 @@ configs/<name>.json
 suites/<name>.json
 data/sessions/<session-id>/...
 data/comparisons/<cmp-id>/report.md
+data/tmp/                  # 一次性输入草稿，不进 git
 ```
 
 每个会话是一棵树。发请求时用当前 system + 祖先链上的 user/assistant。请求失败也会落盘。
