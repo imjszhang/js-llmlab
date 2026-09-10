@@ -1,0 +1,8 @@
+{
+  "name": "deepseek-v4-pro-effort",
+  "configs": [
+    "ds-v4-pro-reason-low",
+    "ds-v4-pro-reason",
+    "ds-v4-pro-reason-max"
+  ]
+}

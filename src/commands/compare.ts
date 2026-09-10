@@ -1,6 +1,12 @@
 import chalk from "chalk";
 import type { ComparisonSpec, ComparisonVariant, SharedCliOptions } from "../types.ts";
-import { loadEnv, overridesFromCli, resolveConfig } from "../lib/config.ts";
+import {
+  collectConfigRefs,
+  compareOverridesFromCli,
+  loadEnv,
+  resolveConfigRef,
+  safeVariantName,
+} from "../lib/config.ts";
 import { createId } from "../lib/ids.ts";
 import { findProjectRoot } from "../lib/paths.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
@@ -8,20 +14,17 @@ import { renderComparisonReport, truncateTitle } from "../lib/render.ts";
 import { LabStore } from "../lib/store.ts";
 import { appendTurn, forkBranch } from "../lib/tree.ts";
 
-export async function runCompare(
-  options: SharedCliOptions & { configs?: string },
-): Promise<void> {
+export async function runCompare(options: SharedCliOptions): Promise<void> {
   const root = findProjectRoot();
   loadEnv(root);
   const store = new LabStore(root);
   store.ensureLayout();
 
-  const configNames = (options.configs ?? "")
-    .split(",")
-    .map((name) => name.trim())
-    .filter((name) => name !== "");
-  if (configNames.length < 2) {
-    throw new Error("compare 需要至少两个配置，例如 --configs default,deepseek");
+  const refs = collectConfigRefs(options, root);
+  if (refs.length < 2) {
+    throw new Error(
+      "compare 需要至少两个配置或模型，例如 --configs deepseek,gpt-4o 或 --models deepseek-chat,gpt-4o",
+    );
   }
 
   const systemName = options.system ?? "default";
@@ -34,13 +37,13 @@ export async function runCompare(
     mode: "run",
   });
   const systemText = resolveSystemText(root, systemName);
-  const overrides = overridesFromCli(options);
+  const overrides = compareOverridesFromCli(options);
 
   let sessionId = options.session;
   if (sessionId === undefined) {
     const session = store.createSession({
-      title: truncateTitle(`compare: ${configNames.join(",")}`),
-      defaultConfig: configNames[0] ?? "default",
+      title: truncateTitle(`compare: ${refs.join(",")}`),
+      defaultConfig: refs[0] ?? "default",
       defaultSystem: systemName,
     });
     sessionId = session.id;
@@ -56,7 +59,7 @@ export async function runCompare(
   const spec: ComparisonSpec = {
     id: createId("c"),
     createdAt: new Date().toISOString(),
-    configs: configNames,
+    configs: refs,
     systemPreset: systemName,
     userPreset: userName,
     input: userText,
@@ -65,22 +68,23 @@ export async function runCompare(
   };
 
   const variants: ComparisonVariant[] = [];
-  for (const configName of configNames) {
-    const config = resolveConfig(root, configName, overrides);
-    if (!store.branchExists(sessionId, configName)) {
-      forkBranch(store, sessionId, configName, fromNodeId);
+  for (const ref of refs) {
+    const config = resolveConfigRef(root, ref, overrides);
+    const branchName = safeVariantName(ref);
+    if (!store.branchExists(sessionId, branchName)) {
+      forkBranch(store, sessionId, branchName, fromNodeId);
     } else {
       store.writeBranch(sessionId, {
-        ...store.getBranch(sessionId, configName),
+        ...store.getBranch(sessionId, branchName),
         head: fromNodeId,
       });
     }
 
-    console.log(chalk.dim(`运行配置 ${configName}...`));
+    console.log(chalk.dim(`运行 ${ref} → ${config.model}...`));
     const node = await appendTurn({
       store,
       sessionId,
-      branchName: configName,
+      branchName,
       parentId: fromNodeId,
       config,
       systemText,
@@ -89,16 +93,17 @@ export async function runCompare(
       userText,
     });
     variants.push({
-      configName,
+      configName: ref,
       config: node.config,
       assistant: node.messages.assistant,
+      reasoning: node.messages.reasoning,
       usage: node.usage,
       latencyMs: node.latencyMs,
       error: node.error,
       nodeId: node.id,
     });
     if (node.error !== null) {
-      console.log(chalk.red(`${configName} 失败：${node.error}`));
+      console.log(chalk.red(`${ref} 失败：${node.error}`));
     }
   }
 

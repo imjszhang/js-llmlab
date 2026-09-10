@@ -1,0 +1,7 @@
+{
+  "name": "ds-reasoner",
+  "provider": "llmcore",
+  "model": "deepseek-reasoner",
+  "temperature": 0.3,
+  "maxTokens": 8192
+}

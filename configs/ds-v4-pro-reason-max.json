@@ -1,0 +1,9 @@
+{
+  "name": "ds-v4-pro-reason-max",
+  "provider": "llmcore",
+  "model": "deepseek-v4-pro",
+  "thinking": "enabled",
+  "reasoningEffort": "max",
+  "temperature": 0.3,
+  "maxTokens": 16384
+}

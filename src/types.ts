@@ -1,25 +1,37 @@
+export type ThinkingMode = "enabled" | "disabled";
+export type ReasoningEffort = "low" | "high" | "max";
+
 export type ConfigSnapshot = {
   name: string;
+  provider: string | null;
   baseURL: string;
   model: string;
   temperature: number;
   maxTokens: number;
+  thinking: ThinkingMode | null;
+  reasoningEffort: ReasoningEffort | null;
 };
 
 export type NamedConfigFile = {
   name?: string;
+  provider?: string;
   baseURL?: string;
   model?: string;
   temperature?: number;
   maxTokens?: number;
   apiKeyEnv?: string;
+  thinking?: ThinkingMode;
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type CliConfigOverrides = {
+  provider?: string;
   baseURL?: string;
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  thinking?: ThinkingMode;
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type ResolvedConfig = ConfigSnapshot & {
@@ -42,12 +54,14 @@ export type TokenUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  reasoningTokens: number | null;
 };
 
 export type NodeMessages = {
   system: string;
   user: string;
   assistant: string;
+  reasoning: string | null;
 };
 
 export type SessionNode = {
@@ -93,6 +107,7 @@ export type ComparisonVariant = {
   configName: string;
   config: ConfigSnapshot;
   assistant: string;
+  reasoning: string | null;
   usage: TokenUsage | null;
   latencyMs: number;
   error: string | null;
@@ -108,7 +123,20 @@ export type SharedCliOptions = {
   message?: string;
   input?: string;
   model?: string;
+  models?: string;
+  configs?: string;
+  provider?: string;
+  suite?: string;
   temperature?: string;
   maxTokens?: string;
+  thinking?: string;
+  reasoningEffort?: string;
   from?: string;
+};
+
+export type ConfigRefSource = "file" | "model";
+
+export type ConfigRefPeek = ConfigPeek & {
+  ref: string;
+  source: ConfigRefSource;
 };

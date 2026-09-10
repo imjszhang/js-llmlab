@@ -13,6 +13,7 @@ import type {
   SessionMeta,
   SessionNode,
 } from "../types.ts";
+import { safeVariantName } from "./config.ts";
 import { createId } from "./ids.ts";
 import {
   comparisonDir,
@@ -188,7 +189,7 @@ export class LabStore {
     mkdirSync(path.join(dir, "variants"), { recursive: true });
     writeJson(path.join(dir, "spec.json"), spec);
     for (const variant of variants) {
-      const variantDir = path.join(dir, "variants", variant.configName);
+      const variantDir = path.join(dir, "variants", safeVariantName(variant.configName));
       mkdirSync(variantDir, { recursive: true });
       writeJson(path.join(variantDir, "meta.json"), {
         config: variant.config,
@@ -242,6 +243,10 @@ export class LabStore {
         promptTokens: Number(usageRaw.promptTokens),
         completionTokens: Number(usageRaw.completionTokens),
         totalTokens: Number(usageRaw.totalTokens),
+        reasoningTokens:
+          usageRaw.reasoningTokens === undefined || usageRaw.reasoningTokens === null
+            ? null
+            : Number(usageRaw.reasoningTokens),
       };
     }
     return {
@@ -250,10 +255,28 @@ export class LabStore {
       createdAt: requireString(raw.createdAt, "createdAt"),
       config: {
         name: requireString(raw.config.name, "config.name"),
+        provider:
+          raw.config.provider === undefined || raw.config.provider === null
+            ? null
+            : requireString(raw.config.provider, "config.provider"),
         baseURL: requireString(raw.config.baseURL, "config.baseURL"),
         model: requireString(raw.config.model, "config.model"),
         temperature: Number(raw.config.temperature),
         maxTokens: Number(raw.config.maxTokens),
+        thinking:
+          raw.config.thinking === undefined || raw.config.thinking === null
+            ? null
+            : raw.config.thinking === "enabled" || raw.config.thinking === "disabled"
+              ? raw.config.thinking
+              : null,
+        reasoningEffort:
+          raw.config.reasoningEffort === undefined || raw.config.reasoningEffort === null
+            ? null
+            : raw.config.reasoningEffort === "low" ||
+                raw.config.reasoningEffort === "high" ||
+                raw.config.reasoningEffort === "max"
+              ? raw.config.reasoningEffort
+              : null,
       },
       systemPreset: requireNullableString(raw.systemPreset, "systemPreset"),
       userPreset: requireNullableString(raw.userPreset, "userPreset"),
@@ -261,6 +284,10 @@ export class LabStore {
         system: requireString(raw.messages.system, "messages.system"),
         user: requireString(raw.messages.user, "messages.user"),
         assistant: requireString(raw.messages.assistant, "messages.assistant"),
+        reasoning:
+          raw.messages.reasoning === undefined
+            ? null
+            : requireNullableString(raw.messages.reasoning, "messages.reasoning"),
       },
       usage,
       latencyMs: Number(raw.latencyMs),

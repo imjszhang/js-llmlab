@@ -3,7 +3,7 @@ import { stdin as input, stdout as output } from "node:process";
 import chalk from "chalk";
 import type { LabStore } from "./store.ts";
 import { listPresets } from "./presets.ts";
-import { listConfigs } from "./config.ts";
+import { listConfigs, listProviders, peekConfigRef } from "./config.ts";
 import { forkBranch } from "./tree.ts";
 import { renderTree } from "./render.ts";
 
@@ -11,6 +11,7 @@ export type ReplState = {
   sessionId: string;
   branchName: string;
   configName: string;
+  providerName: string | null;
   systemName: string | null;
   userName: string | null;
 };
@@ -27,7 +28,8 @@ export function createReadline(): readline.Interface {
 export function formatPrompt(state: ReplState): string {
   const system = state.systemName ?? "-";
   const user = state.userName ?? "-";
-  return `${chalk.cyan("js-llmlab")} ${chalk.dim(state.sessionId)} ${chalk.yellow(state.branchName)} ${chalk.dim(`[${state.configName}/${system}/${user}]`)} > `;
+  const provider = state.providerName ?? "-";
+  return `${chalk.cyan("js-llmlab")} ${chalk.dim(state.sessionId)} ${chalk.yellow(state.branchName)} ${chalk.dim(`[${provider}/${state.configName}/${system}/${user}]`)} > `;
 }
 
 export function helpText(): string {
@@ -36,7 +38,8 @@ export function helpText(): string {
     "  /help                 显示帮助",
     "  /system [name]        查看或切换 system 预设",
     "  /user [name|clear]    查看、切换或清除 user 预设",
-    "  /config [name]        查看或切换命名配置",
+    "  /config [name]        查看或切换命名配置，或直接填模型 id",
+    "  /provider [name]      查看或切换 provider，例如 llmcore",
     "  /branch [name]        切换已有分支；不存在则从当前 head fork",
     "  /branches             列出分支",
     "  /tree                 显示会话树",
@@ -114,18 +117,33 @@ export async function handleSlashCommand(params: {
       console.log(`已切换 user：${arg}`);
       return "handled";
     }
+    case "provider": {
+      if (arg === "") {
+        console.log(`当前 provider：${state.providerName ?? "(默认)"}`);
+        console.log(`可用：${listProviders(root).join(", ") || "(无)"}`);
+        return "handled";
+      }
+      if (!listProviders(root).includes(arg)) {
+        console.log(chalk.red(`找不到 provider：${arg}`));
+        return "handled";
+      }
+      state.providerName = arg;
+      console.log(`已切换 provider：${arg}`);
+      return "handled";
+    }
     case "config": {
       if (arg === "") {
         console.log(`当前配置：${state.configName}`);
-        console.log(`可用：${listConfigs(root).join(", ") || "(无)"}`);
+        console.log(`命名配置：${listConfigs(root).join(", ") || "(无)"}`);
+        console.log("也可以直接填模型 id，例如 /config gpt-4o");
         return "handled";
       }
-      if (!listConfigs(root).includes(arg)) {
-        console.log(chalk.red(`找不到配置：${arg}`));
-        return "handled";
-      }
+      const peeked = peekConfigRef(root, arg);
       state.configName = arg;
-      console.log(`已切换配置：${arg}`);
+      const source = peeked.source === "file" ? "文件" : "模型 id";
+      console.log(
+        `已切换配置：${arg}  [${source}] model=${peeked.snapshot.model} temp=${String(peeked.snapshot.temperature)}`,
+      );
       return "handled";
     }
     case "branches": {

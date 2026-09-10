@@ -3,6 +3,7 @@ import type { ChatMessage, ResolvedConfig, TokenUsage } from "../types.ts";
 
 export type CompletionResult = {
   text: string;
+  reasoning: string | null;
   usage: TokenUsage | null;
   latencyMs: number;
 };
@@ -10,6 +11,7 @@ export type CompletionResult = {
 export type CompletionOptions = {
   stream?: boolean;
   onDelta?: (chunk: string) => void;
+  onReasoningDelta?: (chunk: string) => void;
 };
 
 export function createClient(config: ResolvedConfig): OpenAI {
@@ -19,15 +21,59 @@ export function createClient(config: ResolvedConfig): OpenAI {
   });
 }
 
-function mapUsage(usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined): TokenUsage | null {
-  if (usage === undefined) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readStringField(value: unknown, keys: string[]): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+  for (const key of keys) {
+    const field = value[key];
+    if (typeof field === "string" && field !== "") {
+      return field;
+    }
+  }
+  return "";
+}
+
+function mapUsage(usage: unknown): TokenUsage | null {
+  if (!isRecord(usage)) {
     return null;
   }
+  const details = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details : null;
+  const reasoningRaw = details?.reasoning_tokens ?? usage.reasoning_tokens;
   return {
-    promptTokens: usage.prompt_tokens ?? 0,
-    completionTokens: usage.completion_tokens ?? 0,
-    totalTokens: usage.total_tokens ?? 0,
+    promptTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0,
+    completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0,
+    totalTokens: typeof usage.total_tokens === "number" ? usage.total_tokens : 0,
+    reasoningTokens: typeof reasoningRaw === "number" ? reasoningRaw : null,
   };
+}
+
+function buildChatRequest(
+  config: ResolvedConfig,
+  messages: ChatMessage[],
+  stream: boolean,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {
+    model: config.model,
+    temperature: config.temperature,
+    max_tokens: config.maxTokens,
+    messages,
+  };
+  if (config.reasoningEffort !== null) {
+    params.reasoning_effort = config.reasoningEffort;
+  }
+  if (config.thinking !== null) {
+    params.thinking = { type: config.thinking };
+  }
+  if (stream) {
+    params.stream = true;
+    params.stream_options = { include_usage: true };
+  }
+  return params;
 }
 
 export async function runCompletion(
@@ -40,40 +86,47 @@ export async function runCompletion(
   const stream = options.stream === true;
 
   if (stream) {
-    const response = await client.chat.completions.create({
-      model: config.model,
-      temperature: config.temperature,
-      max_tokens: config.maxTokens,
-      messages,
-      stream: true,
-      stream_options: { include_usage: true },
-    });
+    const response = (await client.chat.completions.create(
+      buildChatRequest(config, messages, true) as never,
+    )) as unknown as AsyncIterable<{ choices: Array<{ delta?: unknown }>; usage?: unknown }>;
 
     let text = "";
+    let reasoning = "";
     let usage: TokenUsage | null = null;
     for await (const chunk of response) {
-      const delta = chunk.choices[0]?.delta.content;
-      if (delta !== undefined && delta !== null && delta !== "") {
-        text += delta;
-        options.onDelta?.(delta);
+      const delta = chunk.choices[0]?.delta;
+      const content = readStringField(delta, ["content"]);
+      if (content !== "") {
+        text += content;
+        options.onDelta?.(content);
       }
-      const mapped = mapUsage(chunk.usage ?? undefined);
+      const think = readStringField(delta, ["reasoning_content", "reasoning", "thinking"]);
+      if (think !== "") {
+        reasoning += think;
+        options.onReasoningDelta?.(think);
+      }
+      const mapped = mapUsage(chunk.usage);
       if (mapped !== null) {
         usage = mapped;
       }
     }
-    return { text, usage, latencyMs: Date.now() - started };
+    return {
+      text,
+      reasoning: reasoning === "" ? null : reasoning,
+      usage,
+      latencyMs: Date.now() - started,
+    };
   }
 
-  const response = await client.chat.completions.create({
-    model: config.model,
-    temperature: config.temperature,
-    max_tokens: config.maxTokens,
-    messages,
-  });
-  const text = response.choices[0]?.message.content ?? "";
+  const response = await client.chat.completions.create(
+    buildChatRequest(config, messages, false) as never,
+  );
+  const message = response.choices[0]?.message;
+  const text = readStringField(message, ["content"]);
+  const reasoning = readStringField(message, ["reasoning_content", "reasoning", "thinking"]);
   return {
     text,
+    reasoning: reasoning === "" ? null : reasoning,
     usage: mapUsage(response.usage),
     latencyMs: Date.now() - started,
   };
@@ -84,4 +137,48 @@ export function formatError(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+export type ProviderModel = {
+  id: string;
+  ownedBy: string | null;
+};
+
+export async function listProviderModels(config: ResolvedConfig): Promise<ProviderModel[]> {
+  const url = `${config.baseURL.replace(/\/+$/u, "")}/models`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      Accept: "application/json",
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`列出模型失败：HTTP ${String(response.status)} ${text.slice(0, 200)}`);
+  }
+  const body: unknown = JSON.parse(text);
+  const rows = isRecord(body) && Array.isArray(body.data) ? body.data : [];
+  const models: ProviderModel[] = [];
+  for (const row of rows) {
+    if (typeof row === "string" && row !== "") {
+      models.push({ id: row, ownedBy: null });
+      continue;
+    }
+    if (!isRecord(row)) {
+      continue;
+    }
+    const id = typeof row.id === "string" ? row.id : typeof row.name === "string" ? row.name : "";
+    if (id === "") {
+      continue;
+    }
+    const ownedBy =
+      typeof row.owned_by === "string"
+        ? row.owned_by
+        : typeof row.owner === "string"
+          ? row.owner
+          : null;
+    models.push({ id, ownedBy });
+  }
+  models.sort((a, b) => a.id.localeCompare(b.id));
+  return models;
 }

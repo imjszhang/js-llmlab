@@ -1,0 +1,8 @@
+{
+  "name": "llmcore",
+  "baseURL": "https://proxy.llm-core.cn/v1",
+  "apiKeyEnv": "LLMCORE_API_KEY",
+  "model": "deepseek-chat",
+  "temperature": 0.3,
+  "maxTokens": 4096
+}

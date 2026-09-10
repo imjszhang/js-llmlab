@@ -1,0 +1,4 @@
+{
+  "name": "deepseek-v4-reason",
+  "configs": ["ds-v4-flash-reason", "ds-v4-pro-reason"]
+}

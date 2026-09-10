@@ -1,8 +1,8 @@
 # js-llmlab
 
-本地 CLI 实验室：对接 OpenAI 兼容接口，用环境变量和命名配置切换 provider / 模型，用文件保存 system/user 预设、会话树、分支和对比实验结果。
+本地 CLI 实验室：对接 OpenAI 兼容接口。`.env` 只放各 provider 的密钥；`providers/` 描述网关；`configs/` 描述要测的模型/参数。用文件保存预设、会话树、分支和对比结果。
 
-创建日期：2026-09-11。
+创建日期：2026-09-11。文档更新：2026-09-11。
 
 ## 要求
 
@@ -17,33 +17,70 @@ npm install
 cp .env.example .env
 ```
 
-编辑 `.env`，填入密钥和默认入口。DeepSeek 示例：
+编辑 `.env`，给要用的 provider 填密钥：
 
 ```bash
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-chat
+JS_LLMLAB_PROVIDER=llmcore
+LLMCORE_API_KEY=sk-...
+# OPENAI_API_KEY=
+# DEEPSEEK_API_KEY=
 ```
-
-本地运行：
 
 ```bash
 npx tsx src/cli.ts status
-# 或
-npm start -- status
-# 或
-npx js-llmlab status
+npx tsx src/cli.ts provider ls
+npx tsx src/cli.ts models --provider llmcore
 ```
 
 ## 配置分层
 
 后者覆盖前者：
 
-1. 环境变量：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`，以及可选的 `OPENAI_TEMPERATURE`、`OPENAI_MAX_TOKENS`、`JS_LLMLAB_DATA_DIR`
-2. `configs/<name>.json` 命名配置（密钥不进文件，只用 `apiKeyEnv` 指向环境变量名）
-3. CLI：`--model`、`--temperature`、`--max-tokens`
+1. `providers/<name>.json`：网关的 `baseURL`、`apiKeyEnv`、默认模型
+2. `configs/<name>.json`：引用 `provider`，再覆盖 `model` / `temperature` / `maxTokens`
+3. 没有配置文件时，名称当作模型 id，走当前或 `--provider` 指定的网关
+4. CLI：`--provider`、`--temperature`、`--max-tokens`（`compare` 不会用 `--model` 冲掉每一路）
 
-落盘快照只保留 `name` / `baseURL` / `model` / `temperature` / `maxTokens`，不会写出 API Key。
+当前主力是 **llmcore**（`https://proxy.llm-core.cn/v1`）。另外预置了 `openai`、`deepseek` 官方入口，填对应密钥即可用。
+
+主测四套（都在 llmcore 上）：三套 Chat，外加一套推理。
+
+- `ds-chat` → `deepseek-chat`
+- `ds-v4-flash` → `deepseek-v4-flash`（thinking 关闭）
+- `ds-v4-pro` → `deepseek-v4-pro`（thinking 关闭）
+- `ds-v4-flash-reason` / `ds-v4-pro-reason` → thinking 开启，`reasoningEffort=high`
+- `ds-v4-flash-reason-low` / `-max`、`ds-v4-pro-reason-low` / `-max` → 同一模型换推理强度
+- `ds-reasoner` → `deepseek-reasoner`
+
+推理强度可写在配置文件的 `reasoningEffort`（`low` / `high` / `max`），或命令行 `--reasoning-effort`。
+
+预定义对比组：`suites/deepseek.json`，`suites/deepseek-v4-reason.json`，以及 `deepseek-v4-flash-effort` / `deepseek-v4-pro-effort`。
+
+```bash
+js-llmlab compare --suite deepseek --message '用一句话解释注意力'
+```
+
+落盘快照含 `provider` / `name` / `baseURL` / `model` / `temperature` / `maxTokens`，不含 API Key。
+
+## 命令
+
+```bash
+js-llmlab status
+js-llmlab provider ls
+js-llmlab provider show llmcore
+js-llmlab models [--provider llmcore]
+js-llmlab config ls
+js-llmlab config show ds-chat
+js-llmlab chat [--provider llmcore] [--config ds-chat]
+js-llmlab run --config ds-chat --message text
+js-llmlab compare --suite deepseek --message text
+js-llmlab compare --provider llmcore --models deepseek-chat,deepseek-v4-flash,deepseek-v4-pro --message text
+js-llmlab session ls
+js-llmlab session show <id>
+js-llmlab branch create --session id --name alt [--from node]
+```
+
+`chat` 斜杠命令：`/help` `/provider` `/system` `/user` `/config` `/branch` `/branches` `/tree` `/exit`。
 
 ## 提示词预设
 
@@ -52,41 +89,17 @@ npx js-llmlab status
 
 user 预设可用 `{{input}}`。没有占位符时：`run` / `compare` 把预设当作完整 user 消息；`chat` 会把预设和当前输入拼在一起。
 
-## 命令
-
-```bash
-js-llmlab status
-js-llmlab chat [--session id] [--branch name] [--config name] [--system name] [--user name]
-js-llmlab run --message text|--input file [--session] [--branch] [--config] [--system] [--user]
-js-llmlab session ls
-js-llmlab session show <id>
-js-llmlab branch create --session id --name alt [--from node]
-js-llmlab branch ls --session id
-js-llmlab compare --configs a,b --message text|--input file [--system] [--user] [--session] [--from node]
-```
-
-`chat` 斜杠命令：`/help` `/system` `/user` `/config` `/branch` `/branches` `/tree` `/exit`。`/branch <name>` 已存在则切换，不存在则从当前 head fork。
-
 ## 文件记录
 
-项目根从当前目录向上查找 `package.json` 且 `name === "js-llmlab"`。数据默认写在 `data/`（可用 `JS_LLMLAB_DATA_DIR` 覆盖）。
-
 ```text
-data/sessions/<session-id>/
-  meta.json
-  nodes/<node-id>.json
-  turns/<node-id>.md
-  branches/main.json
-  branches/<name>.json
-
-data/comparisons/<cmp-id>/
-  spec.json
-  variants/<config-name>/output.md
-  variants/<config-name>/meta.json
-  report.md
+providers/<name>.json
+configs/<name>.json
+suites/<name>.json
+data/sessions/<session-id>/...
+data/comparisons/<cmp-id>/report.md
 ```
 
-每个会话是一棵树。发请求时用**当前** system + 祖先链上的 user/assistant。中途 `/system` 只影响之后的轮次。请求失败也会落盘，节点带 `error`。
+每个会话是一棵树。发请求时用当前 system + 祖先链上的 user/assistant。请求失败也会落盘。
 
 ## 开发
 

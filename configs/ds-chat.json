@@ -1,0 +1,7 @@
+{
+  "name": "ds-chat",
+  "provider": "llmcore",
+  "model": "deepseek-chat",
+  "temperature": 0.3,
+  "maxTokens": 4096
+}

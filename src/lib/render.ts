@@ -16,10 +16,13 @@ export function renderTurn(node: SessionNode): string {
     `- parent: ${node.parentId ?? "null"}`,
     `- createdAt: ${node.createdAt}`,
     `- config: ${node.config.name}`,
+    `- provider: ${node.config.provider ?? "null"}`,
     `- model: ${node.config.model}`,
     `- baseURL: ${node.config.baseURL}`,
     `- temperature: ${String(node.config.temperature)}`,
     `- maxTokens: ${String(node.config.maxTokens)}`,
+    `- thinking: ${node.config.thinking ?? "null"}`,
+    `- reasoningEffort: ${node.config.reasoningEffort ?? "null"}`,
     `- systemPreset: ${node.systemPreset ?? "null"}`,
     `- userPreset: ${node.userPreset ?? "null"}`,
     `- latencyMs: ${String(node.latencyMs)}`,
@@ -31,8 +34,15 @@ export function renderTurn(node: SessionNode): string {
       `- completionTokens: ${String(node.usage.completionTokens)}`,
       `- totalTokens: ${String(node.usage.totalTokens)}`,
     );
+    if (node.usage.reasoningTokens !== null) {
+      lines.push(`- reasoningTokens: ${String(node.usage.reasoningTokens)}`);
+    }
   }
-  lines.push("", "## System", "", node.messages.system || "_(empty)_", "", "## User", "", node.messages.user, "", "## Assistant", "", node.messages.assistant || "_(empty)_", "");
+  lines.push("", "## System", "", node.messages.system || "_(empty)_", "", "## User", "", node.messages.user);
+  if (node.messages.reasoning !== null && node.messages.reasoning !== "") {
+    lines.push("", "## Reasoning", "", node.messages.reasoning);
+  }
+  lines.push("", "## Assistant", "", node.messages.assistant || "_(empty)_", "");
   return lines.join("\n");
 }
 
@@ -107,10 +117,13 @@ export function renderComparisonReport(
     lines.push(
       `## ${variant.configName}`,
       "",
+      `- provider: ${variant.config.provider ?? "null"}`,
       `- model: ${variant.config.model}`,
       `- baseURL: ${variant.config.baseURL}`,
       `- temperature: ${String(variant.config.temperature)}`,
       `- maxTokens: ${String(variant.config.maxTokens)}`,
+      `- thinking: ${variant.config.thinking ?? "null"}`,
+      `- reasoningEffort: ${variant.config.reasoningEffort ?? "null"}`,
       `- latencyMs: ${String(variant.latencyMs)}`,
       `- error: ${variant.error ?? "null"}`,
       `- nodeId: ${variant.nodeId ?? "null"}`,
@@ -121,6 +134,12 @@ export function renderComparisonReport(
         `- completionTokens: ${String(variant.usage.completionTokens)}`,
         `- totalTokens: ${String(variant.usage.totalTokens)}`,
       );
+      if (variant.usage.reasoningTokens !== null) {
+        lines.push(`- reasoningTokens: ${String(variant.usage.reasoningTokens)}`);
+      }
+    }
+    if (variant.reasoning !== null && variant.reasoning !== "") {
+      lines.push("", "### Reasoning", "", variant.reasoning);
     }
     lines.push("", variant.assistant || "_(empty)_", "");
   }
@@ -131,10 +150,14 @@ export function renderVariantMarkdown(variant: ComparisonVariant): string {
   return [
     `# Variant ${variant.configName}`,
     "",
+    `- provider: ${variant.config.provider ?? "null"}`,
     `- model: ${variant.config.model}`,
     `- baseURL: ${variant.config.baseURL}`,
     `- error: ${variant.error ?? "null"}`,
     "",
+    ...(variant.reasoning !== null && variant.reasoning !== ""
+      ? ["### Reasoning", "", variant.reasoning, ""]
+      : []),
     variant.assistant || "_(empty)_",
     "",
   ].join("\n");

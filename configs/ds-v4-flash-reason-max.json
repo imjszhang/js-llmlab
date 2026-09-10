@@ -1,0 +1,9 @@
+{
+  "name": "ds-v4-flash-reason-max",
+  "provider": "llmcore",
+  "model": "deepseek-v4-flash",
+  "thinking": "enabled",
+  "reasoningEffort": "max",
+  "temperature": 0.3,
+  "maxTokens": 16384
+}

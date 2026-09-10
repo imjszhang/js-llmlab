@@ -1,0 +1,8 @@
+{
+  "name": "openai",
+  "baseURL": "https://api.openai.com/v1",
+  "apiKeyEnv": "OPENAI_API_KEY",
+  "model": "gpt-4o",
+  "temperature": 0.3,
+  "maxTokens": 4096
+}

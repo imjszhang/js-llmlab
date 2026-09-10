@@ -9,6 +9,8 @@ export function makeLabRoot(): string {
     `${JSON.stringify({ name: "js-llmlab", private: true }, null, 2)}\n`,
   );
   mkdirSync(path.join(root, "configs"), { recursive: true });
+  mkdirSync(path.join(root, "providers"), { recursive: true });
+  mkdirSync(path.join(root, "suites"), { recursive: true });
   mkdirSync(path.join(root, "prompts", "system"), { recursive: true });
   mkdirSync(path.join(root, "prompts", "user"), { recursive: true });
   mkdirSync(path.join(root, "data"), { recursive: true });

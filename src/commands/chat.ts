@@ -1,6 +1,5 @@
 import chalk from "chalk";
-import type { SharedCliOptions } from "../types.ts";
-import { loadEnv, overridesFromCli, resolveConfig } from "../lib/config.ts";
+import { loadEnv, overridesFromCli, peekConfigRef, resolveConfigRef } from "../lib/config.ts";
 import { findProjectRoot } from "../lib/paths.ts";
 import { resolveSystemText, resolveUserText } from "../lib/presets.ts";
 import { truncateTitle } from "../lib/render.ts";
@@ -13,6 +12,18 @@ import {
   helpText,
   type ReplState,
 } from "../lib/repl.ts";
+import type { CliConfigOverrides, SharedCliOptions } from "../types.ts";
+
+function withProvider(
+  options: SharedCliOptions,
+  providerName: string | null,
+): CliConfigOverrides {
+  const overrides = overridesFromCli(options);
+  if (providerName !== null) {
+    overrides.provider = providerName;
+  }
+  return overrides;
+}
 
 export async function runChat(options: SharedCliOptions): Promise<void> {
   const root = findProjectRoot();
@@ -20,8 +31,9 @@ export async function runChat(options: SharedCliOptions): Promise<void> {
   const store = new LabStore(root);
   store.ensureLayout();
 
-  const configName = options.config ?? "default";
-  resolveConfig(root, configName, overridesFromCli(options));
+  const configName = options.config ?? "ds-chat";
+  const initial = peekConfigRef(root, configName, overridesFromCli(options));
+  resolveConfigRef(root, configName, overridesFromCli(options));
 
   let sessionId = options.session;
   const systemName = options.system ?? "default";
@@ -45,6 +57,7 @@ export async function runChat(options: SharedCliOptions): Promise<void> {
     sessionId,
     branchName,
     configName,
+    providerName: options.provider ?? initial.snapshot.provider,
     systemName,
     userName: options.user ?? null,
   };
@@ -80,7 +93,7 @@ export async function runChat(options: SharedCliOptions): Promise<void> {
       let config;
       let systemText: string;
       try {
-        config = resolveConfig(root, state.configName, overridesFromCli(options));
+        config = resolveConfigRef(root, state.configName, withProvider(options, state.providerName));
         systemText = resolveSystemText(root, state.systemName);
         userText = resolveUserText({
           root,
@@ -93,7 +106,8 @@ export async function runChat(options: SharedCliOptions): Promise<void> {
         continue;
       }
 
-      process.stdout.write(chalk.green("assistant: "));
+      let reasoningStarted = false;
+      let contentStarted = false;
       const node = await appendTurn({
         store,
         sessionId: state.sessionId,
@@ -105,7 +119,21 @@ export async function runChat(options: SharedCliOptions): Promise<void> {
         userText,
         completion: {
           stream: true,
+          onReasoningDelta: (chunk) => {
+            if (!reasoningStarted) {
+              process.stdout.write(chalk.dim("[reasoning]\n"));
+              reasoningStarted = true;
+            }
+            process.stdout.write(chalk.dim(chunk));
+          },
           onDelta: (chunk) => {
+            if (!contentStarted) {
+              if (reasoningStarted) {
+                process.stdout.write("\n");
+              }
+              process.stdout.write(chalk.green("assistant: "));
+              contentStarted = true;
+            }
             process.stdout.write(chunk);
           },
         },

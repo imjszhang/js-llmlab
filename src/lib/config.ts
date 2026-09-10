@@ -4,18 +4,22 @@ import { config as loadDotenv } from "dotenv";
 import type {
   CliConfigOverrides,
   ConfigPeek,
+  ConfigRefPeek,
   ConfigSnapshot,
   NamedConfigFile,
+  ReasoningEffort,
   ResolvedConfig,
   SharedCliOptions,
+  ThinkingMode,
 } from "../types.ts";
-import { getConfigsDir } from "./paths.ts";
+import { getConfigsDir, getProvidersDir, getSuitesDir } from "./paths.ts";
 
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TEMPERATURE = 1;
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_API_KEY_ENV = "OPENAI_API_KEY";
+const DEFAULT_PROVIDER = "llmcore";
 
 export function loadEnv(root: string): void {
   loadDotenv({ path: path.join(root, ".env"), quiet: true });
@@ -47,18 +51,44 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   }
   const parsed: NamedConfigFile = {};
   const name = optionalString(raw.name);
+  const provider = optionalString(raw.provider);
   const baseURL = optionalString(raw.baseURL);
   const model = optionalString(raw.model);
   const temperature = optionalNumber(raw.temperature);
   const maxTokens = optionalNumber(raw.maxTokens);
   const apiKeyEnv = optionalString(raw.apiKeyEnv);
+  const thinking = parseThinkingMode(raw.thinking);
+  const reasoningEffort = parseReasoningEffort(raw.reasoningEffort);
   if (name !== undefined) parsed.name = name;
+  if (provider !== undefined) parsed.provider = provider;
   if (baseURL !== undefined) parsed.baseURL = baseURL;
   if (model !== undefined) parsed.model = model;
   if (temperature !== undefined) parsed.temperature = temperature;
   if (maxTokens !== undefined) parsed.maxTokens = maxTokens;
   if (apiKeyEnv !== undefined) parsed.apiKeyEnv = apiKeyEnv;
+  if (thinking !== undefined) parsed.thinking = thinking;
+  if (reasoningEffort !== undefined) parsed.reasoningEffort = reasoningEffort;
   return parsed;
+}
+
+export function parseThinkingMode(value: unknown): ThinkingMode | undefined {
+  if (value === "enabled" || value === "disabled") {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  throw new Error(`thinking 只能是 enabled 或 disabled，收到 ${String(value)}`);
+}
+
+export function parseReasoningEffort(value: unknown): ReasoningEffort | undefined {
+  if (value === "low" || value === "high" || value === "max") {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  throw new Error(`reasoningEffort 只能是 low、high 或 max，收到 ${String(value)}`);
 }
 
 export function loadNamedConfig(root: string, name: string): NamedConfigFile {
@@ -71,7 +101,55 @@ export function loadNamedConfig(root: string, name: string): NamedConfigFile {
 }
 
 export function listConfigs(root: string): string[] {
-  const dir = getConfigsDir(root);
+  return listJsonNames(getConfigsDir(root));
+}
+
+export function hasNamedConfig(root: string, name: string): boolean {
+  return existsSync(path.join(getConfigsDir(root), `${name}.json`));
+}
+
+export function listProviders(root: string): string[] {
+  return listJsonNames(getProvidersDir(root));
+}
+
+export function hasProvider(root: string, name: string): boolean {
+  return existsSync(path.join(getProvidersDir(root), `${name}.json`));
+}
+
+export function loadProvider(root: string, name: string): NamedConfigFile {
+  const filePath = path.join(getProvidersDir(root), `${name}.json`);
+  if (!existsSync(filePath)) {
+    throw new Error(`找不到 provider：${name}（期望 ${filePath}）`);
+  }
+  const raw: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+  const parsed = parseNamedConfig(raw);
+  if (parsed.name === undefined) {
+    parsed.name = name;
+  }
+  parsed.provider = name;
+  return parsed;
+}
+
+export function listSuites(root: string): string[] {
+  return listJsonNames(getSuitesDir(root));
+}
+
+export function loadSuite(root: string, name: string): string[] {
+  const filePath = path.join(getSuitesDir(root), `${name}.json`);
+  if (!existsSync(filePath)) {
+    throw new Error(`找不到 suite：${name}（期望 ${filePath}）`);
+  }
+  const raw: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+  if (!isRecord(raw) || !Array.isArray(raw.configs)) {
+    throw new Error(`suite ${name} 需要 { "configs": string[] }`);
+  }
+  return raw.configs
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+}
+
+function listJsonNames(dir: string): string[] {
   if (!existsSync(dir)) {
     return [];
   }
@@ -81,50 +159,107 @@ export function listConfigs(root: string): string[] {
     .sort();
 }
 
+export function parseNameList(value: string | undefined): string[] {
+  if (value === undefined || value === "") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+}
+
+export function uniqueNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const name of names) {
+    if (!seen.has(name)) {
+      seen.add(name);
+      result.push(name);
+    }
+  }
+  return result;
+}
+
+export function collectConfigRefs(
+  options: { configs?: string; models?: string; suite?: string },
+  root?: string,
+): string[] {
+  const fromSuite =
+    options.suite !== undefined && root !== undefined ? loadSuite(root, options.suite) : [];
+  return uniqueNames([
+    ...fromSuite,
+    ...parseNameList(options.configs),
+    ...parseNameList(options.models),
+  ]);
+}
+
+export function safeVariantName(name: string): string {
+  const safe = name.replace(/[\\/:*?"<>|]/gu, "_").replace(/\s+/gu, "_");
+  return safe === "" ? "config" : safe;
+}
+
 function envDefaults(): NamedConfigFile {
   const defaults: NamedConfigFile = {
     name: "env",
     apiKeyEnv: DEFAULT_API_KEY_ENV,
   };
-  const baseURL = optionalString(process.env.OPENAI_BASE_URL) ?? DEFAULT_BASE_URL;
-  const model = optionalString(process.env.OPENAI_MODEL) ?? DEFAULT_MODEL;
-  const temperature = parseNumber(process.env.OPENAI_TEMPERATURE) ?? DEFAULT_TEMPERATURE;
-  const maxTokens = parseNumber(process.env.OPENAI_MAX_TOKENS) ?? DEFAULT_MAX_TOKENS;
-  defaults.baseURL = baseURL;
-  defaults.model = model;
-  defaults.temperature = temperature;
-  defaults.maxTokens = maxTokens;
+  const baseURL = optionalString(process.env.OPENAI_BASE_URL);
+  const model = optionalString(process.env.OPENAI_MODEL);
+  const temperature = parseNumber(process.env.OPENAI_TEMPERATURE);
+  const maxTokens = parseNumber(process.env.OPENAI_MAX_TOKENS);
+  if (baseURL !== undefined) defaults.baseURL = baseURL;
+  if (model !== undefined) defaults.model = model;
+  defaults.temperature = temperature ?? DEFAULT_TEMPERATURE;
+  defaults.maxTokens = maxTokens ?? DEFAULT_MAX_TOKENS;
   return defaults;
 }
 
-function mergeConfig(
-  base: NamedConfigFile,
-  overlay: NamedConfigFile,
-): NamedConfigFile {
+function mergeConfig(base: NamedConfigFile, overlay: NamedConfigFile): NamedConfigFile {
   const merged: NamedConfigFile = { ...base };
   if (overlay.name !== undefined) merged.name = overlay.name;
+  if (overlay.provider !== undefined) merged.provider = overlay.provider;
   if (overlay.baseURL !== undefined) merged.baseURL = overlay.baseURL;
   if (overlay.model !== undefined) merged.model = overlay.model;
   if (overlay.temperature !== undefined) merged.temperature = overlay.temperature;
   if (overlay.maxTokens !== undefined) merged.maxTokens = overlay.maxTokens;
   if (overlay.apiKeyEnv !== undefined) merged.apiKeyEnv = overlay.apiKeyEnv;
+  if (overlay.thinking !== undefined) merged.thinking = overlay.thinking;
+  if (overlay.reasoningEffort !== undefined) merged.reasoningEffort = overlay.reasoningEffort;
   return merged;
 }
 
-function requireField(value: string | undefined, field: string): string {
-  if (value === undefined || value === "") {
-    throw new Error(`配置缺少 ${field}`);
+export function pickProviderName(
+  root: string,
+  named: NamedConfigFile,
+  overrides: CliConfigOverrides,
+): string | undefined {
+  const candidates = [
+    overrides.provider,
+    named.provider,
+    optionalString(process.env.JS_LLMLAB_PROVIDER),
+  ];
+  for (const name of candidates) {
+    if (name !== undefined) {
+      return name;
+    }
   }
-  return value;
+  if (hasProvider(root, DEFAULT_PROVIDER)) {
+    return DEFAULT_PROVIDER;
+  }
+  return undefined;
 }
 
 function finalizeSnapshot(merged: NamedConfigFile, fallbackName: string): ConfigSnapshot {
   return {
     name: merged.name ?? fallbackName,
-    baseURL: requireField(merged.baseURL, "baseURL"),
-    model: requireField(merged.model, "model"),
+    provider: merged.provider ?? null,
+    baseURL: merged.baseURL ?? DEFAULT_BASE_URL,
+    model: merged.model ?? DEFAULT_MODEL,
     temperature: merged.temperature ?? DEFAULT_TEMPERATURE,
     maxTokens: merged.maxTokens ?? DEFAULT_MAX_TOKENS,
+    thinking: merged.thinking ?? null,
+    reasoningEffort: merged.reasoningEffort ?? null,
   };
 }
 
@@ -133,15 +268,26 @@ export function peekConfig(
   name?: string,
   overrides: CliConfigOverrides = {},
 ): ConfigPeek {
+  const named = name !== undefined ? loadNamedConfig(root, name) : {};
+  const providerName = pickProviderName(root, named, overrides);
   let merged = envDefaults();
-  if (name !== undefined) {
-    merged = mergeConfig(merged, loadNamedConfig(root, name));
-    if (merged.name === undefined) {
-      merged.name = name;
-    }
+  if (providerName !== undefined) {
+    merged = mergeConfig(merged, loadProvider(root, providerName));
+    merged.provider = providerName;
   }
-  merged = mergeConfig(merged, overrides);
-  const snapshot = finalizeSnapshot(merged, name ?? "env");
+  merged = mergeConfig(merged, named);
+  if (name !== undefined && merged.name === undefined) {
+    merged.name = name;
+  }
+  const overlay: NamedConfigFile = {};
+  if (overrides.baseURL !== undefined) overlay.baseURL = overrides.baseURL;
+  if (overrides.model !== undefined) overlay.model = overrides.model;
+  if (overrides.temperature !== undefined) overlay.temperature = overrides.temperature;
+  if (overrides.maxTokens !== undefined) overlay.maxTokens = overrides.maxTokens;
+  if (overrides.thinking !== undefined) overlay.thinking = overrides.thinking;
+  if (overrides.reasoningEffort !== undefined) overlay.reasoningEffort = overrides.reasoningEffort;
+  merged = mergeConfig(merged, overlay);
+  const snapshot = finalizeSnapshot(merged, name ?? providerName ?? "env");
   const apiKeyEnv = merged.apiKeyEnv ?? DEFAULT_API_KEY_ENV;
   const apiKey = process.env[apiKeyEnv];
   return {
@@ -156,7 +302,39 @@ export function resolveConfig(
   name?: string,
   overrides: CliConfigOverrides = {},
 ): ResolvedConfig {
-  const peeked = peekConfig(root, name, overrides);
+  return requireApiKey(peekConfig(root, name, overrides));
+}
+
+export function peekConfigRef(
+  root: string,
+  ref: string,
+  overrides: CliConfigOverrides = {},
+): ConfigRefPeek {
+  if (hasNamedConfig(root, ref)) {
+    const peeked = peekConfig(root, ref, overrides);
+    return { ...peeked, ref, source: "file" };
+  }
+  const modelOverrides: CliConfigOverrides = { ...overrides };
+  modelOverrides.model = ref;
+  const peeked = peekConfig(root, undefined, modelOverrides);
+  return {
+    snapshot: { ...peeked.snapshot, name: ref },
+    apiKeyEnv: peeked.apiKeyEnv,
+    apiKeyPresent: peeked.apiKeyPresent,
+    ref,
+    source: "model",
+  };
+}
+
+export function resolveConfigRef(
+  root: string,
+  ref: string,
+  overrides: CliConfigOverrides = {},
+): ResolvedConfig {
+  return requireApiKey(peekConfigRef(root, ref, overrides));
+}
+
+function requireApiKey(peeked: ConfigPeek): ResolvedConfig {
   const apiKey = process.env[peeked.apiKeyEnv];
   if (apiKey === undefined || apiKey === "") {
     throw new Error(
@@ -170,18 +348,44 @@ export function resolveConfig(
   };
 }
 
+export function describeNamedConfigs(root: string): ConfigRefPeek[] {
+  return listConfigs(root).map((name) => peekConfigRef(root, name));
+}
+
+export function describeProviders(root: string): ConfigPeek[] {
+  return listProviders(root).map((name) => peekConfig(root, undefined, { provider: name }));
+}
+
+export function compareOverridesFromCli(options: SharedCliOptions): CliConfigOverrides {
+  const overrides = overridesFromCli(options);
+  const result: CliConfigOverrides = {};
+  if (overrides.provider !== undefined) result.provider = overrides.provider;
+  if (overrides.baseURL !== undefined) result.baseURL = overrides.baseURL;
+  if (overrides.temperature !== undefined) result.temperature = overrides.temperature;
+  if (overrides.maxTokens !== undefined) result.maxTokens = overrides.maxTokens;
+  if (overrides.thinking !== undefined) result.thinking = overrides.thinking;
+  if (overrides.reasoningEffort !== undefined) result.reasoningEffort = overrides.reasoningEffort;
+  return result;
+}
+
 export function toSnapshot(config: ResolvedConfig): ConfigSnapshot {
   return {
     name: config.name,
+    provider: config.provider,
     baseURL: config.baseURL,
     model: config.model,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    thinking: config.thinking,
+    reasoningEffort: config.reasoningEffort,
   };
 }
 
 export function overridesFromCli(options: SharedCliOptions): CliConfigOverrides {
   const overrides: CliConfigOverrides = {};
+  if (options.provider !== undefined) {
+    overrides.provider = options.provider;
+  }
   if (options.model !== undefined) {
     overrides.model = options.model;
   }
@@ -192,6 +396,14 @@ export function overridesFromCli(options: SharedCliOptions): CliConfigOverrides 
   const maxTokens = parseNumber(options.maxTokens);
   if (maxTokens !== undefined) {
     overrides.maxTokens = maxTokens;
+  }
+  const thinking = parseThinkingMode(options.thinking);
+  if (thinking !== undefined) {
+    overrides.thinking = thinking;
+  }
+  const reasoningEffort = parseReasoningEffort(options.reasoningEffort);
+  if (reasoningEffort !== undefined) {
+    overrides.reasoningEffort = reasoningEffort;
   }
   return overrides;
 }

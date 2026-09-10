@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import type { SharedCliOptions } from "../types.ts";
-import { loadEnv, overridesFromCli, resolveConfig } from "../lib/config.ts";
+import { loadEnv, overridesFromCli, resolveConfigRef } from "../lib/config.ts";
 import { findProjectRoot } from "../lib/paths.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
 import { truncateTitle } from "../lib/render.ts";
@@ -13,8 +13,8 @@ export async function runOnce(options: SharedCliOptions): Promise<void> {
   const store = new LabStore(root);
   store.ensureLayout();
 
-  const configName = options.config ?? "default";
-  const config = resolveConfig(root, configName, overridesFromCli(options));
+  const configName = options.config ?? "ds-chat";
+  const config = resolveConfigRef(root, configName, overridesFromCli(options));
   const systemName = options.system ?? "default";
   const userName = options.user ?? null;
   const input = readMessageInput(options.message, options.input);

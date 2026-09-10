@@ -42,6 +42,14 @@ export function getConfigsDir(root: string): string {
   return path.join(root, "configs");
 }
 
+export function getProvidersDir(root: string): string {
+  return path.join(root, "providers");
+}
+
+export function getSuitesDir(root: string): string {
+  return path.join(root, "suites");
+}
+
 export function getPromptsDir(root: string): string {
   return path.join(root, "prompts");
 }

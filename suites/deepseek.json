@@ -1,0 +1,4 @@
+{
+  "name": "deepseek",
+  "configs": ["ds-chat", "ds-v4-flash", "ds-v4-pro", "ds-reasoner"]
+}
