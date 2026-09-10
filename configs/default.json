@@ -1,0 +1,4 @@
+{
+  "name": "default",
+  "apiKeyEnv": "OPENAI_API_KEY"
+}
