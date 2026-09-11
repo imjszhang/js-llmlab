@@ -115,7 +115,7 @@ test("compare score 命令：写 scores.json、报表追加两列、不发请求
 
   const report = readFileSync(path.join(cmpDir, "report.md"), "utf8");
   assert.match(report, /\| 错误 \| 相似度 \| 改动率 \|/);
-  assert.match(report, /\| a \| model-a \| .* \| - \| 0\.0% \|/);
+  assert.match(report, /\| a \| test \| model-a \| .* \| - \| 0\.0% \|/);
   assert.ok(lines.some((l) => l.includes("几乎没改") && l.includes("a")));
 
   // 带参考答案：相似度有值；重复打分结果一致（scoredAt 除外）

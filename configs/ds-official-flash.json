@@ -1,0 +1,8 @@
+{
+  "name": "ds-official-flash",
+  "provider": "deepseek",
+  "model": "deepseek-flash",
+  "thinking": "disabled",
+  "temperature": 0.3,
+  "maxTokens": 4096
+}

@@ -109,7 +109,7 @@ test("--judge：假裁判返回 {score:7}，每路 judge.score = 7，落到 judg
   // 报表有裁判列与理由
   const report = readFileSync(path.join(root, "data", "comparisons", cmpId, "report.md"), "utf8");
   assert.match(report, /\| 相似度 \| 改动率 \| 裁判 \|/);
-  assert.match(report, /\| a \| model-a \| .* \| 7 \|/);
+  assert.match(report, /\| a \| test \| model-a \| .* \| 7 \|/);
   assert.match(report, /### 裁判理由/);
   assert.match(report, /- a：7 — ok/);
   assert.ok(lines.some((l) => l.includes("裁判 judge-cfg")));
@@ -144,7 +144,7 @@ test("--judge：一路返回非 JSON 时该路 judge.error 有值，其他路正
   assert.ok((a?.similarity ?? null) !== null);
 
   const report = readFileSync(path.join(root, "data", "comparisons", cmpId, "report.md"), "utf8");
-  assert.match(report, /\| b \| model-b \| .* \| 错误 \|/);
+  assert.match(report, /\| b \| test \| model-b \| .* \| 错误 \|/);
 });
 
 test("--judge：rubric 不存在时报错并列出可用名字；候选路失败时不评审", async () => {

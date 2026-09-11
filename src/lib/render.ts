@@ -240,8 +240,8 @@ export function renderSummaryTable(
   const scoreByName = new Map(scores?.variants.map((s) => [s.configName, s]) ?? []);
   const withJudge = scores?.judge !== undefined;
   const header = [
-    "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |",
-    "|---|---|---|---|---:|---:|---:|---:|---:|---|",
+    "| 配置 | provider | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |",
+    "|---|---|---|---|---|---:|---:|---:|---:|---:|---|",
   ];
   if (scores !== null) {
     header[0] = `${header[0] ?? ""} 相似度 | 改动率 |${withJudge ? " 裁判 |" : ""}`;
@@ -250,6 +250,7 @@ export function renderSummaryTable(
   const rows = variants.map((variant) => {
     const cells = [
       cell(variant.configName),
+      cell(variant.config.provider ?? "-"),
       cell(variant.config.model),
       variant.config.thinking ?? "-",
       variant.config.reasoningEffort ?? "-",

@@ -45,20 +45,22 @@ npx tsx src/cli.ts models --provider llmcore
 
 `timeoutMs`（缺省 600000）交给 SDK 做单次请求超时；`maxRetries`（缺省 2）是我们这一层的指数退避重试（1s、2s、4s…），SDK 自身的重试已关掉，不会双重重试。流式一旦开始输出就不再重试。两项都进节点快照，`config show` 会打出来。
 
-当前主力是 **llmcore**（`https://proxy.llm-core.cn/v1`）。另外预置了 `openai`、`deepseek` 官方入口，填对应密钥即可用。
+当前主力是 **llmcore**（`https://proxy.llm-core.cn/v1`）。另外预置了 `openai`、`deepseek` 官方入口（`https://api.deepseek.com`，默认模型 `deepseek-flash`），填对应密钥即可用。
 
-主测四套（都在 llmcore 上）：三套 Chat，外加一套推理。
+主测几套：llmcore 上四套 Chat / 推理，外加官方 Flash 一路。
 
-- `ds-chat` → `deepseek-chat`
-- `ds-v4-flash` → `deepseek-v4-flash`（thinking 关闭）
-- `ds-v4-pro` → `deepseek-v4-pro`（thinking 关闭）
+- `ds-chat` → llmcore / `deepseek-chat`
+- `ds-v4-flash` → llmcore / `deepseek-v4-flash`（thinking 关闭）
+- `ds-official-flash` → 官方 DeepSeek / `deepseek-flash`（thinking 关闭；表里 provider 列是 `deepseek`，和 llmcore 的 `ds-v4-*` 分开）
+- `ds-official-flash-reason` / `-low` / `-max` → 同一官方模型换推理强度
+- `ds-v4-pro` → llmcore / `deepseek-v4-pro`（thinking 关闭）
 - `ds-v4-flash-reason` / `ds-v4-pro-reason` → thinking 开启，`reasoningEffort=high`
 - `ds-v4-flash-reason-low` / `-max`、`ds-v4-pro-reason-low` / `-max` → 同一模型换推理强度
-- `ds-reasoner` → `deepseek-reasoner`
+- `ds-reasoner` → llmcore / `deepseek-reasoner`
 
 推理强度可写在配置文件的 `reasoningEffort`（`low` / `high` / `max`），或命令行 `--reasoning-effort`。
 
-预定义对比组：`suites/deepseek.json`，`suites/deepseek-v4-reason.json`，以及 `deepseek-v4-flash-effort` / `deepseek-v4-pro-effort`。
+预定义对比组：`suites/deepseek.json`，`suites/deepseek-v4-reason.json`，以及 `deepseek-v4-flash-effort` / `deepseek-v4-pro-effort` / `deepseek-official-flash-effort`。
 
 ```bash
 js-llmlab compare --suite deepseek --message '用一句话解释注意力'
@@ -143,7 +145,7 @@ data/tmp/                  # 一次性输入草稿，不进 git
 
 查网关怪癖（`reasoning_content` 形态、effort 是否生效、上游到底路由到谁）看 `nodes/<id>.raw.json`：非流式存完整响应对象，流式存拼接后的最终对象和 `chunkCount`，失败存 `error`（name / message / status / body / requestId）。`requestId` 取响应头 `x-request-id`，没有就依次试 `x-oneapi-request-id`（llmcore 用这个）、`x-keybalancer-request-id`、`request-id`、`cf-ray`，都没有就是 `null`；所有像 id 的响应头都在 `headers` 字段里。写盘前会把当前 apiKey 字符串整体打码成 `***`，raw 文件不进 `report.md` / turn md。
 
-`report.md` 开头是一张汇总表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误），`compare` 结束时终端也打这张表。
+`report.md` 开头是一张汇总表（配置 | provider | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误），`compare` 结束时终端也打这张表。官方 DeepSeek 与 llmcore 同场时靠 `provider` 列区分（`deepseek` vs `llmcore`）。
 
 `compare` 各路并行发请求，缺省并发 3，`--concurrency <n>` 可调；结果始终按输入顺序写入，与完成顺序无关。终端每路开始、结束各打一行，结束行带耗时与是否出错。
 

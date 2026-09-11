@@ -2,7 +2,7 @@
   "name": "deepseek",
   "baseURL": "https://api.deepseek.com",
   "apiKeyEnv": "DEEPSEEK_API_KEY",
-  "model": "deepseek-chat",
+  "model": "deepseek-flash",
   "temperature": 0.3,
   "maxTokens": 4096
 }

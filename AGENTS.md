@@ -111,18 +111,22 @@ fixture 与黄金文件：
 
 suite 文件形状：`{ "name": "...", "configs": ["a", "b"] }`，放在 `suites/<name>.json`。
 
-现成 suite：`deepseek`、`deepseek-v4-reason`、`deepseek-v4-flash-effort`、`deepseek-v4-pro-effort`。
+现成 suite：`deepseek`、`deepseek-v4-reason`、`deepseek-v4-flash-effort`、`deepseek-v4-pro-effort`、`deepseek-official-flash-effort`。
 
-现成配置（都在 llmcore 上）：
+现成配置：
 
-| 配置 | 模型 | thinking | effort |
-|---|---|---|---|
-| `ds-chat` | deepseek-chat | — | — |
-| `ds-v4-flash` / `ds-v4-pro` | v4-flash / v4-pro | disabled | — |
-| `ds-v4-*-reason-low` | 同上 | enabled | low |
-| `ds-v4-*-reason` | 同上 | enabled | high |
-| `ds-v4-*-reason-max` | 同上 | enabled | max（`maxTokens` 16384） |
-| `ds-reasoner` | deepseek-reasoner | — | — |
+| 配置 | provider | 模型 | thinking | effort |
+|---|---|---|---|---|
+| `ds-chat` | llmcore | deepseek-chat | — | — |
+| `ds-v4-flash` / `ds-v4-pro` | llmcore | v4-flash / v4-pro | disabled | — |
+| `ds-official-flash` | deepseek（官方） | deepseek-flash | disabled | — |
+| `ds-official-flash-reason-low` | deepseek（官方） | deepseek-flash | enabled | low |
+| `ds-official-flash-reason` | deepseek（官方） | deepseek-flash | enabled | high |
+| `ds-official-flash-reason-max` | deepseek（官方） | deepseek-flash | enabled | max（`maxTokens` 16384） |
+| `ds-v4-*-reason-low` | llmcore | 同上 v4 | enabled | low |
+| `ds-v4-*-reason` | llmcore | 同上 v4 | enabled | high |
+| `ds-v4-*-reason-max` | llmcore | 同上 v4 | enabled | max（`maxTokens` 16384） |
+| `ds-reasoner` | llmcore | deepseek-reasoner | — | — |
 
 加新配置：在 `configs/` 写 JSON，`name` 与文件名（去 `.json`）一致。不要把密钥写进 JSON。
 
@@ -146,7 +150,7 @@ data/tmp/                      一次性输入
 
 节点旁边的 `nodes/<id>.raw.json` 是原始材料：请求体（无密钥）、原始响应（流式为拼接后的最终对象 + `chunkCount`）、`systemFingerprint`、像 id 的响应头、失败时的 `error` 序列化。要查「effort 有没有进请求体」「网关回了什么字段」读它，别猜。`store.readNodeRaw` 可读；`listNodes` 会跳过 `.raw.json`。写盘经过 `redactSecrets`，当前 apiKey 一律 `***`；节点 `error` 文本也同样打码。
 
-compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
+compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，第二列是 `provider`（官方 DeepSeek 是 `deepseek`，中转是 `llmcore`），「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
 
 某路失败（网关 5xx、超时）别整组重来：`compare retry <c_id>` 只补跑 `error != null` 的路，复用原 spec 的输入和节点里记录的 system 文本、原节点的配置快照（只允许 `--timeout-ms` / `--max-retries` 覆盖），新节点仍以 `fromNodeId` 为父，旧失败节点留在树里。补跑后 `report.md` 重渲染，`scores.json` 若存在会被删掉并提示重新打分。
 
