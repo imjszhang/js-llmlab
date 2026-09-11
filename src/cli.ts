@@ -8,6 +8,7 @@ import { runProviderLs, runProviderShow } from "./commands/provider.ts";
 import { runOnce } from "./commands/run.ts";
 import { runSessionLs, runSessionShow } from "./commands/session.ts";
 import { runStatus } from "./commands/status.ts";
+import { readPackageVersion } from "./lib/version.ts";
 import type { SharedCliOptions } from "./types.ts";
 
 function addSharedOptions(command: Command): Command {
@@ -64,7 +65,7 @@ async function main(): Promise<void> {
   program
     .name("js-llmlab")
     .description("OpenAI 兼容接口的本地提示词实验 CLI")
-    .version("0.1.0");
+    .version(readPackageVersion());
 
   program.command("status").description("查看环境、配置和预设").action(() => {
     runStatus();
