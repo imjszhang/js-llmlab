@@ -79,6 +79,7 @@ js-llmlab run --config ds-v4-flash-reason --message text --dry-run   # 只打印
 js-llmlab compare --suite deepseek --message text
 js-llmlab compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 各路并行，缺省并发 3
 js-llmlab compare score <c_id> --reference data/tmp/gold.txt   # 对已有对比算相似度 / 改动率，不发请求
+js-llmlab compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason   # 再让 LLM 裁判逐路打 0–10 分
 js-llmlab compare --provider llmcore --models deepseek-chat,deepseek-v4-flash,deepseek-v4-pro --message text
 js-llmlab session ls
 js-llmlab session show <id>
@@ -93,6 +94,7 @@ js-llmlab branch create --session id --name alt [--from node]
 
 - `prompts/system/<name>.md`
 - `prompts/user/<name>.md`
+- `prompts/judge/<name>.md`（`compare score --judge` 的 rubric）
 
 user 预设可用 `{{input}}`。没有占位符时：`run` / `compare` 把预设当作完整 user 消息；`chat` 会把预设和当前输入拼在一起。
 
@@ -120,6 +122,14 @@ data/tmp/                  # 一次性输入草稿，不进 git
 - `similarity`：候选与参考答案的字符级 LCS 相似度（0–1）；不给 `--reference` 则为 `null`
 - `changeRatio`：候选相对基线（缺省对比输入）的改动比例（0–1）；`barelyChanged` = 改动率 < 5%
 - 写 `data/comparisons/<c_id>/scores.json`，并在 `report.md` 汇总表追加「相似度 | 改动率」两列
+
+加 `--judge <config> [--rubric <name>] [--concurrency <n>]` 让一路配置当 LLM 裁判（会发请求）：
+
+- rubric 是 `prompts/judge/<name>.md`，缺省 `default`；模板变量 `{{input}}`、`{{reference}}`、`{{candidate}}`
+- 裁判需只输出 `{"score": 0-10, "reason": "..."}`；解析失败只记到该路的 `judge.error`，不影响其他路
+- 结果进 `scores.json` 每路的 `judge` 字段，汇总表多一列「裁判」，报表末尾附「裁判理由」
+- 每次裁判调用都落到一个新会话（标题 `judge: <c_id>`，每路一个分支），思维链可回看
+- 裁判分数有波动：同一配置判同一批候选，两次可差 1–2 分。要下结论就多判几次或换裁判交叉
 
 ## 开发
 

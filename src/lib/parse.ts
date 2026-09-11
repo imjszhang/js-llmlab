@@ -3,6 +3,7 @@ import type {
   ComparisonSpec,
   ComparisonVariant,
   ConfigSnapshot,
+  JudgeVerdict,
   SessionNode,
   TokenUsage,
   VariantScore,
@@ -111,6 +112,20 @@ function nullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+export function parseJudgeVerdict(raw: unknown): JudgeVerdict {
+  if (!isRecord(raw)) {
+    throw new Error("judge 格式无效");
+  }
+  return {
+    score: nullableNumber(raw.score),
+    reason: requireNullableString(raw.reason, "judge.reason"),
+    error: requireNullableString(raw.error, "judge.error"),
+    nodeId: requireNullableString(raw.nodeId, "judge.nodeId"),
+    usage: parseUsage(raw.usage),
+    latencyMs: Number(raw.latencyMs ?? 0),
+  };
+}
+
 export function parseVariantScore(raw: unknown): VariantScore {
   if (!isRecord(raw)) {
     throw new Error("scores.variants[] 格式无效");
@@ -119,25 +134,37 @@ export function parseVariantScore(raw: unknown): VariantScore {
   if (ratio === null) {
     throw new Error("scores.variants[].changeRatio 必须是数字");
   }
-  return {
+  const score: VariantScore = {
     configName: requireString(raw.configName, "configName"),
     similarity: nullableNumber(raw.similarity),
     changeRatio: ratio,
     barelyChanged: raw.barelyChanged === true,
   };
+  if (raw.judge !== undefined && raw.judge !== null) {
+    score.judge = parseJudgeVerdict(raw.judge);
+  }
+  return score;
 }
 
 export function parseComparisonScores(raw: unknown): ComparisonScores {
   if (!isRecord(raw) || !Array.isArray(raw.variants)) {
     throw new Error("scores.json 格式无效");
   }
-  return {
+  const scores: ComparisonScores = {
     comparisonId: requireString(raw.comparisonId, "comparisonId"),
     reference: requireNullableString(raw.reference, "reference"),
     baseline: requireNullableString(raw.baseline, "baseline"),
     scoredAt: requireString(raw.scoredAt, "scoredAt"),
     variants: raw.variants.map((item) => parseVariantScore(item)),
   };
+  if (isRecord(raw.judge)) {
+    scores.judge = {
+      config: parseConfigSnapshot(raw.judge.config, "judge.config"),
+      rubric: requireString(raw.judge.rubric, "judge.rubric"),
+      sessionId: requireString(raw.judge.sessionId, "judge.sessionId"),
+    };
+  }
+  return scores;
 }
 
 /** 完整的一路结果（含成稿），fixture 与 readComparison 的产物都走这里。 */

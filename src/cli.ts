@@ -176,13 +176,16 @@ async function main(): Promise<void> {
     .description("对已有对比算相似度与改动率，写 scores.json 并更新 report.md；不发请求")
     .option("--reference <file>", "参考答案文件；不给则相似度为 null")
     .option("--baseline <file>", "改动率的基线文件；缺省用对比的输入")
+    .option("--judge <config>", "用该配置当 LLM 裁判逐路打 0–10 分（会发请求）")
+    .option("--rubric <name>", "裁判 rubric，prompts/judge/<name>.md，缺省 default")
+    .option("--concurrency <n>", "裁判并发路数，缺省 3")
     .action(async (comparison: string, options: Record<string, unknown>) => {
       const scoreOptions: ScoreCliOptions = {};
-      if (typeof options.reference === "string") {
-        scoreOptions.reference = options.reference;
-      }
-      if (typeof options.baseline === "string") {
-        scoreOptions.baseline = options.baseline;
+      for (const key of ["reference", "baseline", "judge", "rubric", "concurrency"] as const) {
+        const value = options[key];
+        if (typeof value === "string") {
+          scoreOptions[key] = value;
+        }
       }
       await runCompareScore(comparison, scoreOptions);
     });

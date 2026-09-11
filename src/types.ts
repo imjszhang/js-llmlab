@@ -114,7 +114,25 @@ export type ComparisonVariant = {
   nodeId: string | null;
 };
 
-/** `compare score` 对一路的离线指标。 */
+/** LLM 裁判对一路的裁决。解析失败或请求失败时 `score` 为 null、`error` 有值。 */
+export type JudgeVerdict = {
+  score: number | null;
+  reason: string | null;
+  error: string | null;
+  /** 裁判调用落在会话树里的节点。 */
+  nodeId: string | null;
+  usage: TokenUsage | null;
+  latencyMs: number;
+};
+
+/** 本次裁判用的配置、rubric 与会话。 */
+export type JudgeInfo = {
+  config: ConfigSnapshot;
+  rubric: string;
+  sessionId: string;
+};
+
+/** `compare score` 对一路的指标。 */
 export type VariantScore = {
   configName: string;
   /** 与参考答案的相似度，0–1；没给 `--reference` 时为 null。 */
@@ -123,6 +141,8 @@ export type VariantScore = {
   changeRatio: number;
   /** changeRatio < 0.05，几乎没改。 */
   barelyChanged: boolean;
+  /** 带 `--judge` 时才有。 */
+  judge?: JudgeVerdict;
 };
 
 export type ComparisonScores = {
@@ -133,6 +153,8 @@ export type ComparisonScores = {
   baseline: string | null;
   scoredAt: string;
   variants: VariantScore[];
+  /** 带 `--judge` 时才有。 */
+  judge?: JudgeInfo;
 };
 
 export type SharedCliOptions = {

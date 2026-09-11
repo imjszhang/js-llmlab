@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { getPromptsDir } from "./paths.ts";
 
-export type PresetKind = "system" | "user";
+export type PresetKind = "system" | "user" | "judge";
 export type UserPresetMode = "run" | "chat";
 
 export function listPresets(root: string, kind: PresetKind): string[] {

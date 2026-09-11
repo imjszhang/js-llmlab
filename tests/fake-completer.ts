@@ -5,8 +5,8 @@ import type { ChatMessage, ResolvedConfig, TokenUsage } from "../src/types.ts";
  * 一条假回复的规则。按 `config.name`（命名配置）或 `config.model` 匹配。
  */
 export type FakeReply = {
-  /** 成稿。缺省回显最后一条 user 消息。 */
-  text?: string;
+  /** 成稿。缺省回显最后一条 user 消息；传函数可按收到的 messages 定制。 */
+  text?: string | ((messages: ChatMessage[]) => string);
   reasoning?: string | null;
   usage?: TokenUsage | null;
   /** 模拟网关延迟。 */
@@ -84,7 +84,10 @@ export function createFakeCompleter(
       throw new Error(rule.error ?? `fake failure for ${key}`);
     }
 
-    const text = rule.text ?? `echo: ${lastUser(messages)}`;
+    const text =
+      typeof rule.text === "function"
+        ? rule.text(messages)
+        : (rule.text ?? `echo: ${lastUser(messages)}`);
     const reasoning = rule.reasoning === undefined ? null : rule.reasoning;
 
     if (options.stream === true) {
