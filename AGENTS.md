@@ -121,11 +121,14 @@ suite 文件形状：`{ "name": "...", "configs": ["a", "b"] }`，放在 `suites
 
 ```text
 data/sessions/<s_id>/          会话树、节点 JSON、turn md
-data/comparisons/<c_id>/       report.md + 各路 output.md
+data/comparisons/<c_id>/       spec.json、report.md（汇总表 + Input + 各路成稿）
+  variants/<配置>/             meta.json、output.md（成稿）、reasoning.md（思维链，没有就不生成）
 data/tmp/                      一次性输入
 ```
 
-节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token。`run` 终端只打 assistant；推理看 turn md 或 compare 的 report。
+节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
+
+compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
 
 **不要提交：** `.env`、`data/sessions/**`、`data/comparisons/**`、`data/tmp/` 下除 `.gitkeep` 以外的文件。不要把密钥写进文档、commit message 或对话回复。
 

@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- compare 的 `report.md` 改为：元信息 → `## 汇总` 表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误）→ Input → 各路成稿；思维链不再进 report，改写到 `variants/<配置>/reasoning.md`；`output.md` 只留成稿；终端结束时打同一张表（#5）。
+
 ## [0.2.0] - 2026-09-11
 
 M0 地基：网络层可注入、离线冒烟、fixture 与黄金文件。此后所有编排逻辑都能在 CI 里不带 key 验证。

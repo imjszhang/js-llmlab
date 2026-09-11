@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -28,7 +29,7 @@ import {
   getSessionsDir,
   sessionDir,
 } from "./paths.ts";
-import { renderTurn, renderVariantMarkdown } from "./render.ts";
+import { renderTurn, renderVariantMarkdown, renderVariantReasoning } from "./render.ts";
 
 function writeJson(filePath: string, value: unknown): void {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -199,6 +200,12 @@ export class LabStore {
         nodeId: variant.nodeId,
       });
       writeFileSync(path.join(variantDir, "output.md"), renderVariantMarkdown(variant), "utf8");
+      const reasoningPath = path.join(variantDir, "reasoning.md");
+      if (variant.reasoning !== null && variant.reasoning !== "") {
+        writeFileSync(reasoningPath, renderVariantReasoning(variant), "utf8");
+      } else if (existsSync(reasoningPath)) {
+        rmSync(reasoningPath);
+      }
     }
     writeFileSync(path.join(dir, "report.md"), report, "utf8");
     return dir;
