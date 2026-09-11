@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-11
+
+M2 评估与成本：「像不像」有离线指标，「好不好」有 LLM 裁判，「值不值」有成本列。
+
 ### Added
 
 - `compare score <c_id> [--reference <file>] [--baseline <file>]`：对已有对比离线算 `similarity`（字符级 LCS）、`changeRatio`、`barelyChanged`，写 `scores.json`，报表汇总表追加「相似度 | 改动率」列；不发请求（#6）。
