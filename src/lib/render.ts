@@ -4,6 +4,7 @@ import type {
   ComparisonSpec,
   ComparisonVariant,
   DryRunEntry,
+  JudgeVerdict,
   SessionNode,
 } from "../types.ts";
 
@@ -138,6 +139,16 @@ function percent1(value: number | null | undefined): string {
   return value === null || value === undefined ? "-" : `${(value * 100).toFixed(1)}%`;
 }
 
+function judgeCell(verdict: JudgeVerdict | undefined): string {
+  if (verdict === undefined) {
+    return "-";
+  }
+  if (verdict.score === null) {
+    return verdict.error === null ? "-" : "错误";
+  }
+  return Number.isInteger(verdict.score) ? String(verdict.score) : verdict.score.toFixed(1);
+}
+
 /**
  * 每路一行、行序 = 输入顺序的汇总表；report.md 与终端共用。
  * 传了 `scores` 就追加「相似度 | 改动率」两列（按配置名对齐，缺的显示 `-`）。
@@ -147,13 +158,14 @@ export function renderSummaryTable(
   scores: ComparisonScores | null = null,
 ): string {
   const scoreByName = new Map(scores?.variants.map((s) => [s.configName, s]) ?? []);
+  const withJudge = scores?.judge !== undefined;
   const header = [
     "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |",
     "|---|---|---|---|---:|---:|---:|---:|---|",
   ];
   if (scores !== null) {
-    header[0] = `${header[0] ?? ""} 相似度 | 改动率 |`;
-    header[1] = `${header[1] ?? ""}---:|---:|`;
+    header[0] = `${header[0] ?? ""} 相似度 | 改动率 |${withJudge ? " 裁判 |" : ""}`;
+    header[1] = `${header[1] ?? ""}---:|---:|${withJudge ? "---:|" : ""}`;
   }
   const rows = variants.map((variant) => {
     const cells = [
@@ -170,6 +182,9 @@ export function renderSummaryTable(
     if (scores !== null) {
       const score = scoreByName.get(variant.configName);
       cells.push(ratio3(score?.similarity), percent1(score?.changeRatio));
+      if (withJudge) {
+        cells.push(judgeCell(score?.judge));
+      }
     }
     return `| ${cells.join(" | ")} |`;
   });
@@ -201,6 +216,22 @@ export function renderComparisonReport(
     lines.push(
       `相似度 = 与参考答案（${scores.reference ?? "未提供"}）的字符级 LCS 比；改动率 = 相对${scores.baseline ?? "输入"}的改动比例；详见 \`scores.json\`。`,
     );
+    if (scores.judge !== undefined) {
+      lines.push(
+        `裁判 = ${scores.judge.config.name}（${scores.judge.config.model}）按 \`prompts/judge/${scores.judge.rubric}.md\` 打 0–10 分；理由在 \`scores.json\`，思维链在会话 ${scores.judge.sessionId}。`,
+      );
+      const reasons = scores.variants
+        .filter((s) => s.judge !== undefined)
+        .map((s) => {
+          const judge = s.judge as JudgeVerdict;
+          return judge.error === null
+            ? `- ${s.configName}：${String(judge.score)} — ${judge.reason ?? ""}`
+            : `- ${s.configName}：错误 — ${judge.error}`;
+        });
+      if (reasons.length > 0) {
+        lines.push("", "### 裁判理由", "", ...reasons);
+      }
+    }
   }
   lines.push("", "## Input", "", spec.input, "");
 

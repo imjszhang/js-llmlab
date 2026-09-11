@@ -58,6 +58,7 @@ npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo
 npx tsx src/cli.ts compare --configs ds-v4-flash,ds-v4-pro --message '...'
 npx tsx src/cli.ts compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 并行路数，缺省 3
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt   # 离线算相似度 / 改动率，不发请求
+npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason --concurrency 8   # LLM 裁判，会发请求
 npx tsx src/cli.ts session ls
 npx tsx src/cli.ts session show <id>
 ```
@@ -115,7 +116,7 @@ suite 文件形状：`{ "name": "...", "configs": ["a", "b"] }`，放在 `suites
 
 ## 提示词与临时输入
 
-- 可复用的才进 `prompts/system/<name>.md`、`prompts/user/<name>.md`
+- 可复用的才进 `prompts/system/<name>.md`、`prompts/user/<name>.md`、`prompts/judge/<name>.md`
 - user 预设可用 `{{input}}`。没有占位符时：`run` / `compare` 把预设当完整 user 消息
 - **一次性草稿**放 `data/tmp/`，例如 `--input data/tmp/polish-post.txt`
 - 不要把一次性帖子/提示词收进 `prompts/`，除非用户明确要求
@@ -134,6 +135,12 @@ data/tmp/                      一次性输入
 compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
 
 `compare score <c_id>` 是离线的：`similarity` 是与 `--reference` 文件的字符级 LCS 比（0–1，没给就是 null），`changeRatio` 是相对输入（或 `--baseline`）的改动比例，`barelyChanged` 表示改动 < 5%。写 `scores.json` 并给汇总表追加两列。它量的是「像不像」，不是「好不好」；「几乎没改」的路先怀疑 thinking 没开。
+
+量「好不好」用 `--judge <config>`：rubric 在 `prompts/judge/<name>.md`（缺省 `default`，变量 `{{input}}` `{{reference}}` `{{candidate}}`），裁判每路一次调用、落到标题 `judge: <c_id>` 的新会话；结果在 `scores.json` 的 `judge` 字段与汇总表「裁判」列。注意：
+
+- 裁判分有噪声，同一裁判两次可差 1–2 分。别拿单次分数下结论
+- 裁判偶尔输出非法 JSON（中文引号收尾之类），解析器有兜底；仍失败的路 `judge.error` 有值，其余路照常
+- 新 rubric 才进 `prompts/judge/`；一次性的评分说明不要收进去
 
 **不要提交：** `.env`、`data/sessions/**`、`data/comparisons/**`、`data/tmp/` 下除 `.gitkeep` 以外的文件。不要把密钥写进文档、commit message 或对话回复。
 
