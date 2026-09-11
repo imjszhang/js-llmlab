@@ -34,6 +34,7 @@ function node(
     latencyMs: 1,
     error: null,
     cost: null,
+    requestId: null,
   };
 }
 

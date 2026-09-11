@@ -38,6 +38,7 @@ const node: SessionNode = {
   latencyMs: 20,
   error: null,
   cost: null,
+  requestId: null,
 };
 
 test("turn markdown 含正文且不含密钥字段", () => {
@@ -70,6 +71,7 @@ test("对比报告并排两套配置", () => {
       error: null,
       nodeId: "n_a",
       cost: null,
+      requestId: null,
     },
     {
       configName: "deepseek",
@@ -81,6 +83,7 @@ test("对比报告并排两套配置", () => {
       error: null,
       nodeId: "n_b",
       cost: null,
+      requestId: null,
     },
   ];
   const report = renderComparisonReport(spec, variants);
@@ -109,6 +112,7 @@ test("汇总表：行序 = 输入顺序，耗时 1 位小数，缺失为 -，错
       error: null,
       nodeId: "n_a",
       cost: null,
+      requestId: null,
     },
     {
       configName: "broken",
@@ -120,6 +124,7 @@ test("汇总表：行序 = 输入顺序，耗时 1 位小数，缺失为 -，错
       error: longError,
       nodeId: "n_b",
       cost: null,
+      requestId: null,
     },
   ];
   const table = renderSummaryTable(variants);

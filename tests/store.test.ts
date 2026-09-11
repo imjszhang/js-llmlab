@@ -35,6 +35,7 @@ function sampleNode(id: string, parentId: string | null): SessionNode {
     latencyMs: 12,
     error: null,
     cost: null,
+    requestId: null,
   };
 }
 
@@ -99,6 +100,7 @@ test("writeComparison 后 readComparison 能读回成稿与思维链", () => {
     error: node.error,
     nodeId: node.id,
     cost: node.cost,
+    requestId: node.requestId,
   }));
   store.writeComparison(spec, variants, "# report");
 

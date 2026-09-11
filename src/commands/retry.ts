@@ -114,6 +114,7 @@ export async function runCompareRetry(
       error: node.error,
       nodeId: node.id,
       cost: node.cost,
+      requestId: node.requestId,
     };
     return variant;
   });

@@ -7,6 +7,7 @@
 ### Added
 
 - 配置字段 `timeoutMs`（缺省 600000，交给 SDK）与 `maxRetries`（缺省 2，我们这一层指数退避重试，SDK 自身重试关掉）；CLI `--timeout-ms` / `--max-retries`；两项进节点快照，老节点缺字段读成默认值；`config show` 打印。流式一旦开始输出不再重试（#10）。
+- 每个节点旁写 `nodes/<id>.raw.json`：请求体（无密钥）、原始响应（流式为拼接后的最终对象 + `chunkCount`）、`systemFingerprint`、像 id 的响应头、失败时的错误序列化；节点与 compare `meta.json` 新增 `requestId`（依次取 `x-request-id` / `x-oneapi-request-id` / `x-keybalancer-request-id` / `request-id` / `cf-ray`），turn md 打印。写盘前把当前 apiKey 打码成 `***`（#11）。
 - `compare retry <c_id> [--only a,b] [--concurrency n] [--timeout-ms n] [--max-retries n]`：只补跑失败路（或 `--only` 指定的路），复用原输入 / system / 配置快照，更新对应 `variants/<name>/` 与 `report.md`，删除已失效的 `scores.json` 并提示（#10）。
 
 ### Changed
