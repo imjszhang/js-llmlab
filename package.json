@@ -11,7 +11,7 @@
     "start": "tsx src/cli.ts",
     "js-llmlab": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/config.test.ts tests/presets.test.ts tests/store.test.ts tests/tree.test.ts tests/render.test.ts"
+    "test": "tsx --test tests/*.test.ts"
   },
   "engines": {
     "node": ">=20"

@@ -14,6 +14,16 @@ export type CompletionOptions = {
   onReasoningDelta?: (chunk: string) => void;
 };
 
+/**
+ * 发一次补全的函数签名。`runCompletion` 是真实实现；测试里注入假实现，
+ * 让 run / compare 的编排逻辑可以离线验证。
+ */
+export type Completer = (
+  config: ResolvedConfig,
+  messages: ChatMessage[],
+  options?: CompletionOptions,
+) => Promise<CompletionResult>;
+
 export function createClient(config: ResolvedConfig): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,

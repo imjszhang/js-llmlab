@@ -66,7 +66,7 @@ npm test
 npm run typecheck
 ```
 
-单测用 `node:test` + 临时目录（`tests/helpers.ts` 的 `makeLabRoot`）。**禁止**在单测里打真实网关 / llmcore。
+单测用 `node:test` + 临时目录（`tests/helpers.ts` 的 `makeLabRoot` / `makeCommandLab`）。测 `run` / `compare` 编排时，用 `tests/fake-completer.ts` 的 `createFakeCompleter` 通过第二个参数 `deps` 注入，不要碰 `runCompletion`。**禁止**在单测里打真实网关 / llmcore。
 
 ## 配置怎么叠
 

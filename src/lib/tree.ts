@@ -1,5 +1,10 @@
 import type { ChatMessage, ResolvedConfig, SessionNode } from "../types.ts";
-import { formatError, runCompletion, type CompletionOptions } from "./client.ts";
+import {
+  formatError,
+  runCompletion,
+  type Completer,
+  type CompletionOptions,
+} from "./client.ts";
 import { createId } from "./ids.ts";
 import { toSnapshot } from "./config.ts";
 import type { LabStore } from "./store.ts";
@@ -80,6 +85,8 @@ export async function appendTurn(params: {
   userPreset: string | null;
   userText: string;
   completion?: CompletionOptions;
+  /** 缺省用真实网关；测试注入假实现。 */
+  complete?: Completer;
 }): Promise<SessionNode> {
   const {
     store,
@@ -91,6 +98,7 @@ export async function appendTurn(params: {
     userPreset,
     userText,
   } = params;
+  const complete = params.complete ?? runCompletion;
   const branch = store.getBranch(sessionId, branchName);
   const parentId = params.parentId !== undefined ? params.parentId : branch.head;
   if (parentId !== null) {
@@ -102,7 +110,7 @@ export async function appendTurn(params: {
   const createdAt = new Date().toISOString();
 
   try {
-    const result = await runCompletion(config, messages, params.completion ?? {});
+    const result = await complete(config, messages, params.completion ?? {});
     const node: SessionNode = {
       id: nodeId,
       parentId,

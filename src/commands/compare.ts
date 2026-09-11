@@ -8,14 +8,14 @@ import {
   safeVariantName,
 } from "../lib/config.ts";
 import { createId } from "../lib/ids.ts";
-import { findProjectRoot } from "../lib/paths.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
 import { renderComparisonReport, truncateTitle } from "../lib/render.ts";
 import { LabStore } from "../lib/store.ts";
 import { appendTurn, forkBranch } from "../lib/tree.ts";
+import { resolveDeps, type CommandDeps } from "./deps.ts";
 
-export async function runCompare(options: SharedCliOptions): Promise<void> {
-  const root = findProjectRoot();
+export async function runCompare(options: SharedCliOptions, deps?: CommandDeps): Promise<void> {
+  const { root, complete, log } = resolveDeps(deps);
   loadEnv(root);
   const store = new LabStore(root);
   store.ensureLayout();
@@ -80,7 +80,7 @@ export async function runCompare(options: SharedCliOptions): Promise<void> {
       });
     }
 
-    console.log(chalk.dim(`运行 ${ref} → ${config.model}...`));
+    log(chalk.dim(`运行 ${ref} → ${config.model}...`));
     const node = await appendTurn({
       store,
       sessionId,
@@ -91,6 +91,7 @@ export async function runCompare(options: SharedCliOptions): Promise<void> {
       systemPreset: systemName,
       userPreset: userName,
       userText,
+      complete,
     });
     variants.push({
       configName: ref,
@@ -103,12 +104,12 @@ export async function runCompare(options: SharedCliOptions): Promise<void> {
       nodeId: node.id,
     });
     if (node.error !== null) {
-      console.log(chalk.red(`${ref} 失败：${node.error}`));
+      log(chalk.red(`${ref} 失败：${node.error}`));
     }
   }
 
   const report = renderComparisonReport(spec, variants);
   const dir = store.writeComparison(spec, variants, report);
-  console.log(report);
-  console.log(chalk.dim(`已写入 ${dir}`));
+  log(report);
+  log(chalk.dim(`已写入 ${dir}`));
 }
