@@ -66,6 +66,12 @@ function toShared(options: Record<string, unknown>): SharedCliOptions {
   if (typeof options.dryRun === "boolean") {
     shared.dryRun = options.dryRun;
   }
+  if (typeof options.stream === "boolean") {
+    shared.stream = options.stream;
+  }
+  if (typeof options.hideReasoning === "boolean") {
+    shared.hideReasoning = options.hideReasoning;
+  }
   return shared;
 }
 
@@ -124,6 +130,8 @@ async function main(): Promise<void> {
       .description("非交互跑一轮")
       .option("--message <text>", "用户输入")
       .option("--input <file>", "从文件读取用户输入")
+      .option("--stream", "流式打印成稿；思维链变暗打到 stderr")
+      .option("--hide-reasoning", "流式时不打思维链")
       .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
   ).action(async (options: Record<string, unknown>) => {
     await runOnce(toShared(options));

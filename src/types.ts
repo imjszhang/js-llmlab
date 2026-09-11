@@ -249,6 +249,10 @@ export type SharedCliOptions = {
   from?: string;
   /** 只打印解析后的配置与请求体，不发请求、不落盘。 */
   dryRun?: boolean;
+  /** run：流式打印成稿（stdout），思维链变暗打到 stderr。 */
+  stream?: boolean;
+  /** run --stream：不打思维链。 */
+  hideReasoning?: boolean;
   /** compare 并发路数，缺省 3。 */
   concurrency?: string;
   /** compare 每路重复采样次数，缺省 1。 */

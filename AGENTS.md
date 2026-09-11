@@ -54,6 +54,7 @@ npx tsx src/cli.ts config show ds-v4-flash-reason
 npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --message x --dry-run   # 不发请求，打印配置与请求体 JSON
 npx tsx src/cli.ts run --config ds-v4-flash --message '...'
 npx tsx src/cli.ts run --config ds-v4-pro-reason --input data/tmp/foo.txt
+npx tsx src/cli.ts run --config ds-v4-pro-reason-max --stream --input data/tmp/foo.txt   # 成稿流到 stdout，思维链变暗到 stderr（--hide-reasoning 关）
 npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --configs ds-v4-flash,ds-v4-pro --message '...'
 npx tsx src/cli.ts compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 并行路数，缺省 3
@@ -141,7 +142,7 @@ data/comparisons/<c_id>/       spec.json、report.md（汇总表 + Input + 各�
 data/tmp/                      一次性输入
 ```
 
-节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token，`cost` 是按配置 pricing 算出的花费（没配为 null），`requestId` 是网关响应头里的 request id（llmcore 用 `x-oneapi-request-id`；没有为 null）。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
+节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token，`cost` 是按配置 pricing 算出的花费（没配为 null），`requestId` 是网关响应头里的 request id（llmcore 用 `x-oneapi-request-id`；没有为 null）。`run` 的 stdout 只有 assistant（会话行、重试提示、进度、`--stream` 的思维链都在 stderr，`2>/dev/null` 就只剩成稿）；推理看 turn md、`node show`、compare 的 `variants/<配置>/reasoning.md`，或 `run --stream` 时直接看 stderr。等网关时 stderr 是终端才打进度，你在管道里跑看不到是正常的。
 
 节点旁边的 `nodes/<id>.raw.json` 是原始材料：请求体（无密钥）、原始响应（流式为拼接后的最终对象 + `chunkCount`）、`systemFingerprint`、像 id 的响应头、失败时的 `error` 序列化。要查「effort 有没有进请求体」「网关回了什么字段」读它，别猜。`store.readNodeRaw` 可读；`listNodes` 会跳过 `.raw.json`。写盘经过 `redactSecrets`，当前 apiKey 一律 `***`；节点 `error` 文本也同样打码。
 
