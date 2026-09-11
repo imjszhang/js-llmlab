@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `compare score <c_id> [--reference <file>] [--baseline <file>]`：对已有对比离线算 `similarity`（字符级 LCS）、`changeRatio`、`barelyChanged`，写 `scores.json`，报表汇总表追加「相似度 | 改动率」列；不发请求（#6）。
+
 ## [0.3.0] - 2026-09-11
 
 M1 并行与报表：compare 从串行 173 秒变成"最慢一路"的时长，报表一眼能看。

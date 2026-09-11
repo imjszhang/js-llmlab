@@ -9,6 +9,7 @@ import {
 import path from "node:path";
 import type {
   BranchRecord,
+  ComparisonScores,
   ComparisonSpec,
   ComparisonVariant,
   SessionMeta,
@@ -18,6 +19,7 @@ import { safeVariantName } from "./config.ts";
 import { createId } from "./ids.ts";
 import {
   isRecord,
+  parseComparisonScores,
   parseComparisonSpec,
   parseSessionNode,
   requireNullableString,
@@ -224,6 +226,27 @@ export class LabStore {
 
   comparisonExists(comparisonId: string): boolean {
     return existsSync(path.join(comparisonDir(this.root, comparisonId), "spec.json"));
+  }
+
+  /** 只重写 report.md（例如打分后追加列）。 */
+  writeComparisonReport(comparisonId: string, report: string): string {
+    const filePath = path.join(comparisonDir(this.root, comparisonId), "report.md");
+    writeFileSync(filePath, report, "utf8");
+    return filePath;
+  }
+
+  writeScores(comparisonId: string, scores: ComparisonScores): string {
+    const filePath = path.join(comparisonDir(this.root, comparisonId), "scores.json");
+    writeJson(filePath, scores);
+    return filePath;
+  }
+
+  readScores(comparisonId: string): ComparisonScores | null {
+    const filePath = path.join(comparisonDir(this.root, comparisonId), "scores.json");
+    if (!existsSync(filePath)) {
+      return null;
+    }
+    return parseComparisonScores(readJson(filePath));
   }
 
   /**

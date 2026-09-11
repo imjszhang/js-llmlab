@@ -57,6 +57,7 @@ npx tsx src/cli.ts run --config ds-v4-pro-reason --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --configs ds-v4-flash,ds-v4-pro --message '...'
 npx tsx src/cli.ts compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 并行路数，缺省 3
+npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt   # 离线算相似度 / 改动率，不发请求
 npx tsx src/cli.ts session ls
 npx tsx src/cli.ts session show <id>
 ```
@@ -131,6 +132,8 @@ data/tmp/                      一次性输入
 节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
 
 compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
+
+`compare score <c_id>` 是离线的：`similarity` 是与 `--reference` 文件的字符级 LCS 比（0–1，没给就是 null），`changeRatio` 是相对输入（或 `--baseline`）的改动比例，`barelyChanged` 表示改动 < 5%。写 `scores.json` 并给汇总表追加两列。它量的是「像不像」，不是「好不好」；「几乎没改」的路先怀疑 thinking 没开。
 
 **不要提交：** `.env`、`data/sessions/**`、`data/comparisons/**`、`data/tmp/` 下除 `.gitkeep` 以外的文件。不要把密钥写进文档、commit message 或对话回复。
 

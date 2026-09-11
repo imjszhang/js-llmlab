@@ -1,5 +1,6 @@
 import type {
   BranchRecord,
+  ComparisonScores,
   ComparisonSpec,
   ComparisonVariant,
   DryRunEntry,
@@ -129,13 +130,33 @@ export function answerTokens(variant: ComparisonVariant): number | null {
   return completionTokens;
 }
 
-/** 每路一行、行序 = 输入顺序的汇总表；report.md 与终端共用。 */
-export function renderSummaryTable(variants: ComparisonVariant[]): string {
-  const header = "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |";
-  const divider = "|---|---|---|---|---:|---:|---:|---:|---|";
-  const rows = variants.map((variant) =>
-    [
-      "",
+function ratio3(value: number | null | undefined): string {
+  return value === null || value === undefined ? "-" : value.toFixed(3);
+}
+
+function percent1(value: number | null | undefined): string {
+  return value === null || value === undefined ? "-" : `${(value * 100).toFixed(1)}%`;
+}
+
+/**
+ * 每路一行、行序 = 输入顺序的汇总表；report.md 与终端共用。
+ * 传了 `scores` 就追加「相似度 | 改动率」两列（按配置名对齐，缺的显示 `-`）。
+ */
+export function renderSummaryTable(
+  variants: ComparisonVariant[],
+  scores: ComparisonScores | null = null,
+): string {
+  const scoreByName = new Map(scores?.variants.map((s) => [s.configName, s]) ?? []);
+  const header = [
+    "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |",
+    "|---|---|---|---|---:|---:|---:|---:|---|",
+  ];
+  if (scores !== null) {
+    header[0] = `${header[0] ?? ""} 相似度 | 改动率 |`;
+    header[1] = `${header[1] ?? ""}---:|---:|`;
+  }
+  const rows = variants.map((variant) => {
+    const cells = [
       cell(variant.configName),
       cell(variant.config.model),
       variant.config.thinking ?? "-",
@@ -145,15 +166,20 @@ export function renderSummaryTable(variants: ComparisonVariant[]): string {
       intOrDash(answerTokens(variant)),
       intOrDash(variant.usage?.totalTokens),
       variant.error === null ? "-" : truncateCell(variant.error),
-      "",
-    ].join(" | ").trim(),
-  );
-  return [header, divider, ...rows].join("\n");
+    ];
+    if (scores !== null) {
+      const score = scoreByName.get(variant.configName);
+      cells.push(ratio3(score?.similarity), percent1(score?.changeRatio));
+    }
+    return `| ${cells.join(" | ")} |`;
+  });
+  return [...header, ...rows].join("\n");
 }
 
 export function renderComparisonReport(
   spec: ComparisonSpec,
   variants: ComparisonVariant[],
+  scores: ComparisonScores | null = null,
 ): string {
   const lines = [
     `# Comparison ${spec.id}`,
@@ -167,15 +193,16 @@ export function renderComparisonReport(
     "",
     "## 汇总",
     "",
-    renderSummaryTable(variants),
+    renderSummaryTable(variants, scores),
     "",
     "思维链在 `variants/<配置>/reasoning.md`。",
-    "",
-    "## Input",
-    "",
-    spec.input,
-    "",
   ];
+  if (scores !== null) {
+    lines.push(
+      `相似度 = 与参考答案（${scores.reference ?? "未提供"}）的字符级 LCS 比；改动率 = 相对${scores.baseline ?? "输入"}的改动比例；详见 \`scores.json\`。`,
+    );
+  }
+  lines.push("", "## Input", "", spec.input, "");
 
   for (const variant of variants) {
     lines.push(`## ${variant.configName}`, "");
