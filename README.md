@@ -1,5 +1,7 @@
 # js-llmlab
 
+[![ci](https://github.com/imjszhang/js-llmlab/actions/workflows/ci.yml/badge.svg)](https://github.com/imjszhang/js-llmlab/actions/workflows/ci.yml)
+
 本地 CLI 实验室：对接 OpenAI 兼容接口。`.env` 只放各 provider 的密钥；`providers/` 描述网关；`configs/` 描述要测的模型/参数。用文件保存预设、会话树、分支和对比结果。
 
 创建日期：2026-09-11。文档更新：2026-09-11。
@@ -108,3 +110,5 @@ data/tmp/                  # 一次性输入草稿，不进 git
 npm test
 npm run typecheck
 ```
+
+改动走 issue → 分支 → PR → CI，流程与验收要求见 `AGENTS.md` 的「工程流程」；变更记录在 `CHANGELOG.md`。

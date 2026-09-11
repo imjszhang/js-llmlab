@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # 离线冒烟：只解析配置、不发请求。key 是假的，任何真实网络调用都应失败。
+      # #2 落地后改为 compare --dry-run。
+      - name: smoke (offline)
+        env:
+          JS_LLMLAB_PROVIDER: llmcore
+          LLMCORE_API_KEY: ci-dummy-key
+        run: |
+          npx tsx src/cli.ts status
+          npx tsx src/cli.ts config ls
+          npx tsx src/cli.ts config show ds-v4-flash-reason
