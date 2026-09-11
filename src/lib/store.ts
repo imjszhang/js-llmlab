@@ -4,6 +4,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -51,6 +52,18 @@ export type StoredComparison = {
   spec: ComparisonSpec;
   variants: ComparisonVariant[];
   dir: string;
+};
+
+/** `compare ls` 的一行：只读 spec.json 与是否有 scores.json，不读节点。 */
+export type ComparisonSummary = {
+  id: string;
+  createdAt: string;
+  configs: string[];
+  sessionId: string | null;
+  input: string;
+  hasScores: boolean;
+  dir: string;
+  repeat?: number;
 };
 
 export class LabStore {
@@ -101,7 +114,7 @@ export class LabStore {
   getSession(sessionId: string): SessionMeta {
     const filePath = path.join(sessionDir(this.root, sessionId), "meta.json");
     if (!existsSync(filePath)) {
-      throw new Error(`找不到会话：${sessionId}`);
+      throw new Error(`找不到会话：${sessionId}（期望 ${filePath}）`);
     }
     return this.parseSessionMeta(readJson(filePath));
   }
@@ -181,7 +194,7 @@ export class LabStore {
   getNode(sessionId: string, nodeId: string): SessionNode {
     const filePath = path.join(sessionDir(this.root, sessionId), "nodes", `${nodeId}.json`);
     if (!existsSync(filePath)) {
-      throw new Error(`找不到节点：${sessionId}/${nodeId}`);
+      throw new Error(`找不到节点：${sessionId}/${nodeId}（期望 ${filePath}）`);
     }
     return parseSessionNode(readJson(filePath));
   }
@@ -290,6 +303,50 @@ export class LabStore {
 
   comparisonExists(comparisonId: string): boolean {
     return existsSync(path.join(comparisonDir(this.root, comparisonId), "spec.json"));
+  }
+
+  /**
+   * 列出 `data/comparisons/`，按 createdAt 倒序。目录没有或空 → 空数组；
+   * `spec.json` 缺失 / 损坏的目录跳过并记进 `warnings`，不中断。
+   */
+  listComparisons(): { entries: ComparisonSummary[]; warnings: string[] } {
+    const dir = getComparisonsDir(this.root);
+    const entries: ComparisonSummary[] = [];
+    const warnings: string[] = [];
+    if (!existsSync(dir)) {
+      return { entries, warnings };
+    }
+    for (const id of readdirSync(dir)) {
+      const cmpDir = path.join(dir, id);
+      const specPath = path.join(cmpDir, "spec.json");
+      if (!statSync(cmpDir).isDirectory()) {
+        continue;
+      }
+      if (!existsSync(specPath)) {
+        warnings.push(`跳过 ${id}：缺少 spec.json（期望 ${specPath}）`);
+        continue;
+      }
+      try {
+        const spec = parseComparisonSpec(readJson(specPath));
+        const summary: ComparisonSummary = {
+          id: spec.id,
+          createdAt: spec.createdAt,
+          configs: spec.configs,
+          sessionId: spec.sessionId,
+          input: spec.input,
+          hasScores: existsSync(path.join(cmpDir, "scores.json")),
+          dir: cmpDir,
+        };
+        if (spec.repeat !== undefined) {
+          summary.repeat = spec.repeat;
+        }
+        entries.push(summary);
+      } catch (error) {
+        warnings.push(`跳过 ${id}：spec.json 无法解析（${error instanceof Error ? error.message : String(error)}）`);
+      }
+    }
+    entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { entries, warnings };
   }
 
   /** 只重写 report.md（例如打分后追加列）。 */

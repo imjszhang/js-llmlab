@@ -7,6 +7,7 @@
 ### Added
 
 - `compare --repeat <n>`：每路采样 n 次（总任务 = 路数 × n，与 `--concurrency` 叠加），每次都以 `fromNodeId` 为父。汇总表每路仍一行，耗时 / token / 成本列为 `均值 (最小–最大)`（只算成功次数），错误列 `k/n 失败`；`spec.repeat`、`meta.json.runs`、`variants/<配置>/run-<k>.md` 只在 n > 1 时出现，`output.md` 保留第 1 次。`compare score` 对每次成稿分别算并给均值（`scores.json` 的 `runs`），报表相似度 / 改动率列同样 `均值 (最小–最大)`；`compare retry` 只补跑失败的那几次采样。`--repeat 1` 与不带参数完全一致（#9）。
+- `compare ls`（按 createdAt 倒序：c_id、时间、路数 × 次数、session、有无 scores、输入摘要 40 字；空目录友好提示；坏 `spec.json` 跳过并警告到 stderr）、`compare show <c_id>`（与 `report.md` 同一渲染函数的汇总表 + 目录）、`node show <session> <node> [--json]`（turn md 或原始节点 JSON）。找不到会话 / 节点 / 对比时错误信息都带期望路径（#12）。
 - 配置字段 `timeoutMs`（缺省 600000，交给 SDK）与 `maxRetries`（缺省 2，我们这一层指数退避重试，SDK 自身重试关掉）；CLI `--timeout-ms` / `--max-retries`；两项进节点快照，老节点缺字段读成默认值；`config show` 打印。流式一旦开始输出不再重试（#10）。
 - 每个节点旁写 `nodes/<id>.raw.json`：请求体（无密钥）、原始响应（流式为拼接后的最终对象 + `chunkCount`）、`systemFingerprint`、像 id 的响应头、失败时的错误序列化；节点与 compare `meta.json` 新增 `requestId`（依次取 `x-request-id` / `x-oneapi-request-id` / `x-keybalancer-request-id` / `request-id` / `cf-ray`），turn md 打印。写盘前把当前 apiKey 打码成 `***`（#11）。
 - `compare retry <c_id> [--only a,b] [--concurrency n] [--timeout-ms n] [--max-retries n]`：只补跑失败路（或 `--only` 指定的路），复用原输入 / system / 配置快照，更新对应 `variants/<name>/` 与 `report.md`，删除已失效的 `scores.json` 并提示（#10）。

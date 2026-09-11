@@ -9,6 +9,7 @@ import { runCompareRetry, type RetryCliOptions } from "./commands/retry.ts";
 import { runOnce } from "./commands/run.ts";
 import { runCompareScore, type ScoreCliOptions } from "./commands/score.ts";
 import { runSessionLs, runSessionShow } from "./commands/session.ts";
+import { runCompareLs, runCompareShow, runNodeShow } from "./commands/show.ts";
 import { runStatus } from "./commands/status.ts";
 import { readPackageVersion } from "./lib/version.ts";
 import type { SharedCliOptions } from "./types.ts";
@@ -136,6 +137,15 @@ async function main(): Promise<void> {
     runSessionShow(id);
   });
 
+  const node = program.command("node").description("查看单个节点");
+  node
+    .command("show <session> <node>")
+    .description("打印节点的 turn md；--json 打原始节点 JSON")
+    .option("--json", "输出原始节点 JSON")
+    .action((sessionId: string, nodeId: string, options: { json?: boolean }) => {
+      runNodeShow(sessionId, nodeId, options.json === true ? { json: true } : {});
+    });
+
   const branch = program.command("branch").description("管理分支");
   branch
     .command("ls")
@@ -177,6 +187,20 @@ async function main(): Promise<void> {
   ).action(async (options: Record<string, unknown>) => {
     await runCompare(toShared(options));
   });
+
+  compare
+    .command("ls")
+    .description("按时间倒序列出所有对比")
+    .action(() => {
+      runCompareLs();
+    });
+
+  compare
+    .command("show <comparison>")
+    .description("打印一次对比的汇总表（与 report.md 相同）与目录")
+    .action((comparison: string) => {
+      runCompareShow(comparison);
+    });
 
   compare
     .command("score <comparison>")

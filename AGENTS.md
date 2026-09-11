@@ -61,6 +61,9 @@ npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt   # 离线算相似度 / 改动率，不发请求
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason --concurrency 8   # LLM 裁判，会发请求
 npx tsx src/cli.ts compare retry <c_id> [--only a,b]   # 只补跑失败路；--only 指定的路无论成败都重跑
+npx tsx src/cli.ts compare ls                          # 找结果先看这个：倒序、带 session 与有无 scores
+npx tsx src/cli.ts compare show <c_id>                 # 只看汇总表，不翻 report.md
+npx tsx src/cli.ts node show <session> <node> --json   # 拿原始节点 JSON（可直接 JSON.parse）
 npx tsx src/cli.ts session ls
 npx tsx src/cli.ts session show <id>
 ```
