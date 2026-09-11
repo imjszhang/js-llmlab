@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `compare` 各路并行执行，缺省并发 3，`--concurrency <n>` 可调；结果按输入顺序写入；终端每路开始 / 结束各一行并打总耗时。在线 8 路实测总耗时 = 最慢一路（#4）。
+
 ### Changed
 
 - compare 的 `report.md` 改为：元信息 → `## 汇总` 表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误）→ Input → 各路成稿；思维链不再进 report，改写到 `variants/<配置>/reasoning.md`；`output.md` 只留成稿；终端结束时打同一张表（#5）。

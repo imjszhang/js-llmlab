@@ -124,10 +124,21 @@ export class LabStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  writeNode(sessionId: string, node: SessionNode): void {
+  /**
+   * 写节点 JSON 与 turn md。缺省顺手刷一次会话 `updatedAt`；
+   * 并发跑多路时传 `touchSession: false`，整轮结束后调一次 `touchSession`。
+   */
+  writeNode(sessionId: string, node: SessionNode, options: { touchSession?: boolean } = {}): void {
     const dir = sessionDir(this.root, sessionId);
     writeJson(path.join(dir, "nodes", `${node.id}.json`), node);
     writeFileSync(path.join(dir, "turns", `${node.id}.md`), renderTurn(node), "utf8");
+    if (options.touchSession !== false) {
+      this.touchSession(sessionId);
+    }
+  }
+
+  /** 只刷会话的 `updatedAt`。 */
+  touchSession(sessionId: string): void {
     this.updateSession(sessionId, {});
   }
 

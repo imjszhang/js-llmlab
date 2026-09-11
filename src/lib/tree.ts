@@ -87,6 +87,8 @@ export async function appendTurn(params: {
   completion?: CompletionOptions;
   /** 缺省用真实网关；测试注入假实现。 */
   complete?: Completer;
+  /** 并发多路时传 false，由调用方在整轮结束后刷一次会话时间。 */
+  touchSession?: boolean;
 }): Promise<SessionNode> {
   const {
     store,
@@ -108,10 +110,12 @@ export async function appendTurn(params: {
   const messages = buildApiMessages(systemText, ancestors, userText);
   const nodeId = createId("n");
   const createdAt = new Date().toISOString();
+  const writeOptions = { touchSession: params.touchSession !== false };
 
+  let node: SessionNode;
   try {
     const result = await complete(config, messages, params.completion ?? {});
-    const node: SessionNode = {
+    node = {
       id: nodeId,
       parentId,
       createdAt,
@@ -128,11 +132,8 @@ export async function appendTurn(params: {
       latencyMs: result.latencyMs,
       error: null,
     };
-    store.writeNode(sessionId, node);
-    store.writeBranch(sessionId, { ...branch, head: node.id });
-    return node;
   } catch (error) {
-    const node: SessionNode = {
+    node = {
       id: nodeId,
       parentId,
       createdAt,
@@ -149,8 +150,8 @@ export async function appendTurn(params: {
       latencyMs: 0,
       error: formatError(error),
     };
-    store.writeNode(sessionId, node);
-    store.writeBranch(sessionId, { ...branch, head: node.id });
-    return node;
   }
+  store.writeNode(sessionId, node, writeOptions);
+  store.writeBranch(sessionId, { ...branch, head: node.id });
+  return node;
 }
