@@ -6,8 +6,11 @@ import type {
   DryRunEntry,
   JudgeVerdict,
   SessionNode,
+  VariantRun,
+  VariantScore,
 } from "../types.ts";
 import { formatCost } from "./cost.ts";
+import { stat, variantRuns } from "./runs.ts";
 
 /** `--dry-run` 输出：纯 JSON，方便人和 agent 直接读。 */
 export function renderDryRun(entries: DryRunEntry[]): string {
@@ -125,11 +128,11 @@ function intOrDash(value: number | null | undefined): string {
 }
 
 /** 成稿 token：网关的 completion_tokens 含推理，能减就减掉。 */
-export function answerTokens(variant: ComparisonVariant): number | null {
-  if (variant.usage === null) {
+export function answerTokens(run: Pick<VariantRun, "usage">): number | null {
+  if (run.usage === null) {
     return null;
   }
-  const { completionTokens, reasoningTokens } = variant.usage;
+  const { completionTokens, reasoningTokens } = run.usage;
   if (reasoningTokens !== null && reasoningTokens <= completionTokens) {
     return completionTokens - reasoningTokens;
   }
@@ -142,6 +145,77 @@ function ratio3(value: number | null | undefined): string {
 
 function percent1(value: number | null | undefined): string {
   return value === null || value === undefined ? "-" : `${(value * 100).toFixed(1)}%`;
+}
+
+/**
+ * 多次采样的单元格：`均值 (最小–最大)`；只有一个值就直接显示；没有值为 `-`。
+ * 用 en dash 连接极差，和 Markdown 的表格竖线、负号都不冲突。
+ */
+function statCell(values: Array<number | null | undefined>, fmt: (value: number) => string): string {
+  const s = stat(values);
+  if (s === null) {
+    return "-";
+  }
+  if (s.count === 1) {
+    return fmt(s.mean);
+  }
+  return `${fmt(s.mean)} (${fmt(s.min)}–${fmt(s.max)})`;
+}
+
+function costStatCell(runs: VariantRun[]): string {
+  const costs = runs.map((r) => r.cost).filter((c): c is NonNullable<VariantRun["cost"]> => c !== null);
+  const s = stat(costs.map((c) => c.total));
+  if (s === null) {
+    return "-";
+  }
+  const currency = costs[0]?.currency ?? "";
+  const fmt = (v: number): string => v.toFixed(s.max >= 1 ? 2 : 4);
+  return s.count === 1 ? `${fmt(s.mean)} ${currency}` : `${fmt(s.mean)} (${fmt(s.min)}–${fmt(s.max)}) ${currency}`;
+}
+
+/** 多次采样的错误列：`k/n 失败：<第一条错误>`；全成功为 `-`。 */
+function errorStatCell(runs: VariantRun[]): string {
+  const failed = runs.filter((r) => r.error !== null);
+  const first = failed[0];
+  if (first === undefined || first.error === null) {
+    return "-";
+  }
+  return truncateCell(`${String(failed.length)}/${String(runs.length)} 失败：${first.error}`);
+}
+
+function metricCells(variant: ComparisonVariant): string[] {
+  const runs = variantRuns(variant);
+  if (runs.length === 1) {
+    return [
+      seconds(variant.latencyMs),
+      intOrDash(variant.usage?.reasoningTokens),
+      intOrDash(answerTokens(variant)),
+      intOrDash(variant.usage?.totalTokens),
+      formatCost(variant.cost),
+      variant.error === null ? "-" : truncateCell(variant.error),
+    ];
+  }
+  // 均值与极差只按成功的采样算，失败的次数在错误列里数。
+  const ok = runs.filter((r) => r.error === null);
+  const intFmt = (v: number): string => String(Math.round(v));
+  return [
+    statCell(ok.map((r) => r.latencyMs), seconds),
+    statCell(ok.map((r) => r.usage?.reasoningTokens), intFmt),
+    statCell(ok.map((r) => answerTokens(r)), intFmt),
+    statCell(ok.map((r) => r.usage?.totalTokens), intFmt),
+    costStatCell(ok),
+    errorStatCell(runs),
+  ];
+}
+
+function scoreCells(score: VariantScore | undefined): string[] {
+  if (score?.runs !== undefined && score.runs.length > 1) {
+    return [
+      statCell(score.runs.map((r) => r.similarity), ratio3),
+      statCell(score.runs.map((r) => r.changeRatio), percent1),
+    ];
+  }
+  return [ratio3(score?.similarity), percent1(score?.changeRatio)];
 }
 
 function judgeCell(verdict: JudgeVerdict | undefined): string {
@@ -178,16 +252,11 @@ export function renderSummaryTable(
       cell(variant.config.model),
       variant.config.thinking ?? "-",
       variant.config.reasoningEffort ?? "-",
-      seconds(variant.latencyMs),
-      intOrDash(variant.usage?.reasoningTokens),
-      intOrDash(answerTokens(variant)),
-      intOrDash(variant.usage?.totalTokens),
-      formatCost(variant.cost),
-      variant.error === null ? "-" : truncateCell(variant.error),
+      ...metricCells(variant),
     ];
     if (scores !== null) {
       const score = scoreByName.get(variant.configName);
-      cells.push(ratio3(score?.similarity), percent1(score?.changeRatio));
+      cells.push(...scoreCells(score));
       if (withJudge) {
         cells.push(judgeCell(score?.judge));
       }
@@ -202,6 +271,7 @@ export function renderComparisonReport(
   variants: ComparisonVariant[],
   scores: ComparisonScores | null = null,
 ): string {
+  const repeated = spec.repeat !== undefined && spec.repeat > 1;
   const lines = [
     `# Comparison ${spec.id}`,
     "",
@@ -211,13 +281,23 @@ export function renderComparisonReport(
     `- userPreset: ${spec.userPreset ?? "null"}`,
     `- session: ${spec.sessionId ?? "null"}`,
     `- from: ${spec.fromNodeId ?? "null"}`,
+  ];
+  if (repeated) {
+    lines.push(`- repeat: ${String(spec.repeat)}`);
+  }
+  lines.push(
     "",
     "## 汇总",
     "",
     renderSummaryTable(variants, scores),
     "",
     "思维链在 `variants/<配置>/reasoning.md`。",
-  ];
+  );
+  if (repeated) {
+    lines.push(
+      `每路采样 ${String(spec.repeat)} 次，耗时 / token / 成本 / 相似度 / 改动率列为 \`均值 (最小–最大)\`，只按成功的采样算；正文与 \`output.md\` 是第 1 次，其余在 \`variants/<配置>/run-<k>.md\`。裁判只评第 1 次。`,
+    );
+  }
   if (scores !== null) {
     lines.push(
       `相似度 = 与参考答案（${scores.reference ?? "未提供"}）的字符级 LCS 比；改动率 = 相对${scores.baseline ?? "输入"}的改动比例；详见 \`scores.json\`。`,
@@ -275,6 +355,40 @@ export function renderVariantMarkdown(variant: ComparisonVariant): string {
 /** `variants/<name>/reasoning.md`：只有思维链。没有思维链时调用方不落盘。 */
 export function renderVariantReasoning(variant: ComparisonVariant): string {
   return [...variantHeader("Reasoning", variant), variant.reasoning ?? "", ""].join("\n");
+}
+
+/** `variants/<name>/run-<k>.md`：`--repeat` 时第 k 次采样的成稿（含思维链）。 */
+export function renderVariantRun(variant: ComparisonVariant, run: VariantRun, k: number): string {
+  const total = variant.runs?.length ?? 1;
+  const lines = [
+    `# Run ${String(k)}/${String(total)} ${variant.configName}`,
+    "",
+    `- model: ${variant.config.model}`,
+    `- thinking: ${variant.config.thinking ?? "null"}`,
+    `- reasoningEffort: ${variant.config.reasoningEffort ?? "null"}`,
+    `- latencyMs: ${String(run.latencyMs)}`,
+    `- error: ${run.error ?? "null"}`,
+    `- nodeId: ${run.nodeId ?? "null"}`,
+    `- requestId: ${run.requestId ?? "null"}`,
+  ];
+  if (run.usage !== null) {
+    lines.push(
+      `- promptTokens: ${String(run.usage.promptTokens)}`,
+      `- completionTokens: ${String(run.usage.completionTokens)}`,
+      `- totalTokens: ${String(run.usage.totalTokens)}`,
+    );
+    if (run.usage.reasoningTokens !== null) {
+      lines.push(`- reasoningTokens: ${String(run.usage.reasoningTokens)}`);
+    }
+  }
+  if (run.cost !== null) {
+    lines.push(`- cost: ${formatCost(run.cost)}`);
+  }
+  if (run.reasoning !== null && run.reasoning !== "") {
+    lines.push("", "## Reasoning", "", run.reasoning);
+  }
+  lines.push("", "## Assistant", "", run.assistant || "_(empty)_", "");
+  return lines.join("\n");
 }
 
 export function truncateTitle(text: string, max = 40): string {

@@ -61,6 +61,7 @@ function toShared(options: Record<string, unknown>): SharedCliOptions {
   assign("maxRetries", options.maxRetries);
   assign("from", options.from);
   assign("concurrency", options.concurrency);
+  assign("repeat", options.repeat);
   if (typeof options.dryRun === "boolean") {
     shared.dryRun = options.dryRun;
   }
@@ -171,6 +172,7 @@ async function main(): Promise<void> {
       .option("--input <file>", "从文件读取用户输入")
       .option("--from <node>", "从该节点继续")
       .option("--concurrency <n>", "并发路数，缺省 3")
+      .option("--repeat <n>", "每路重复采样次数，缺省 1；> 1 时汇总表显示 均值 (最小–最大)")
       .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
   ).action(async (options: Record<string, unknown>) => {
     await runCompare(toShared(options));

@@ -24,6 +24,7 @@ import {
   renderSummaryTable,
   truncateTitle,
 } from "../lib/render.ts";
+import { parseRepeat, runFromNode, variantFromRuns } from "../lib/runs.ts";
 import { LabStore } from "../lib/store.ts";
 import { ancestorChain, appendTurn, buildApiMessages, forkBranch } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
@@ -57,6 +58,7 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   });
   const systemText = resolveSystemText(root, systemName);
   const concurrency = parseConcurrency(options.concurrency);
+  const repeat = parseRepeat(options.repeat);
 
   if (options.dryRun === true) {
     // 不要 key、不建会话、不写 data/。带 --session/--from 时只读祖先链。
@@ -110,6 +112,9 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
     sessionId,
     fromNodeId,
   };
+  if (repeat > 1) {
+    spec.repeat = repeat;
+  }
 
   // 先把每路的配置与分支准备好（同步、按输入顺序），再并发发请求。
   const tasks = refs.map((ref) => {
@@ -126,10 +131,19 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
     return { ref, config, branchName };
   });
 
+  // 每路 × repeat 次；每次都以 fromNodeId 为父，互不串联。任务按「路序、次序」排队。
+  const jobs = tasks.flatMap((task) => Array.from({ length: repeat }, (_, k) => ({ task, k: k + 1 })));
+  const label = (ref: string, k: number): string => (repeat > 1 ? `${ref}#${String(k)}` : ref);
   const startedAt = Date.now();
-  log(chalk.dim(`${String(tasks.length)} 路，并发 ${String(concurrency)}`));
-  const variants = await mapWithConcurrency(tasks, concurrency, async (task) => {
-    log(chalk.dim(`开始 ${task.ref} → ${task.config.model}`));
+  log(
+    chalk.dim(
+      repeat > 1
+        ? `${String(tasks.length)} 路 × ${String(repeat)} 次 = ${String(jobs.length)} 个任务，并发 ${String(concurrency)}`
+        : `${String(tasks.length)} 路，并发 ${String(concurrency)}`,
+    ),
+  );
+  const results = await mapWithConcurrency(jobs, concurrency, async ({ task, k }) => {
+    log(chalk.dim(`开始 ${label(task.ref, k)} → ${task.config.model}`));
     const begin = Date.now();
     const node = await appendTurn({
       store,
@@ -146,31 +160,31 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
     });
     const elapsed = ((Date.now() - begin) / 1000).toFixed(1);
     if (node.error !== null) {
-      log(chalk.red(`失败 ${task.ref} ${elapsed}s：${node.error}`));
+      log(chalk.red(`失败 ${label(task.ref, k)} ${elapsed}s：${node.error}`));
     } else {
-      log(chalk.dim(`完成 ${task.ref} ${elapsed}s`));
+      log(chalk.dim(`完成 ${label(task.ref, k)} ${elapsed}s`));
     }
-    const variant: ComparisonVariant = {
-      configName: task.ref,
-      config: node.config,
-      assistant: node.messages.assistant,
-      reasoning: node.messages.reasoning,
-      usage: node.usage,
-      latencyMs: node.latencyMs,
-      error: node.error,
-      nodeId: node.id,
-      cost: node.cost,
-      requestId: node.requestId,
-    };
-    return variant;
+    return { ref: task.ref, k, config: node.config, run: runFromNode(node) };
   });
   store.touchSession(sessionId);
   const totalSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+
+  const variants: ComparisonVariant[] = tasks.map((task) => {
+    const own = results.filter((r) => r.ref === task.ref).sort((a, b) => a.k - b.k);
+    const config = own[0]?.config ?? task.config;
+    return variantFromRuns(task.ref, config, own.map((r) => r.run));
+  });
 
   const report = renderComparisonReport(spec, variants);
   const dir = store.writeComparison(spec, variants, report);
   log("");
   log(renderSummaryTable(variants));
   log("");
-  log(chalk.dim(`总耗时 ${totalSeconds}s，已写入 ${dir}（report.md 含各路成稿，思维链在 variants/<配置>/reasoning.md）`));
+  log(
+    chalk.dim(
+      repeat > 1
+        ? `总耗时 ${totalSeconds}s，已写入 ${dir}（表中为均值 (最小–最大)；每次成稿在 variants/<配置>/run-<k>.md）`
+        : `总耗时 ${totalSeconds}s，已写入 ${dir}（report.md 含各路成稿，思维链在 variants/<配置>/reasoning.md）`,
+    ),
+  );
 }

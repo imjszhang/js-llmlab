@@ -94,6 +94,7 @@ js-llmlab run --config ds-chat --message text
 js-llmlab run --config ds-v4-flash-reason --message text --dry-run   # 只打印配置与请求体，不发请求
 js-llmlab compare --suite deepseek --message text
 js-llmlab compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 各路并行，缺省并发 3
+js-llmlab compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt --repeat 3   # 每路采样 3 次，表里是 均值 (最小–最大)
 js-llmlab compare score <c_id> --reference data/tmp/gold.txt   # 对已有对比算相似度 / 改动率，不发请求
 js-llmlab compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason   # 再让 LLM 裁判逐路打 0–10 分
 js-llmlab compare retry <c_id> [--only a,b]   # 只补跑失败的路（或指定的路），更新 variant 与 report.md
@@ -139,6 +140,8 @@ data/tmp/                  # 一次性输入草稿，不进 git
 `report.md` 开头是一张汇总表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误），`compare` 结束时终端也打这张表。
 
 `compare` 各路并行发请求，缺省并发 3，`--concurrency <n>` 可调；结果始终按输入顺序写入，与完成顺序无关。终端每路开始、结束各打一行，结束行带耗时与是否出错。
+
+`--repeat <n>` 让每路采样 n 次（总任务数 = 路数 × n，与 `--concurrency` 叠加）。每次都以同一个父节点发起，互不串联。汇总表每路仍是一行，耗时 / token / 成本列变成 `均值 (最小–最大)`，只按成功的次数算，失败次数在错误列里显示 `k/n 失败`。`output.md` 与报表正文是第 1 次，每次成稿在 `variants/<配置>/run-<k>.md`。`compare score` 会对每次成稿分别算相似度 / 改动率再取均值（`scores.json` 的 `runs` 里有逐次值），裁判只评第 1 次。`--repeat 1` 与不带参数完全一样。
 
 `compare score <c_id> [--reference <file>] [--baseline <file>]` 对已有对比离线打分，不重跑网关：
 

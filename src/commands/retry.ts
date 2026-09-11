@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import type { ComparisonVariant, ResolvedConfig } from "../types.ts";
+import type { ComparisonVariant, ResolvedConfig, VariantRun } from "../types.ts";
 import {
   loadEnv,
   parseMaxRetries,
@@ -10,6 +10,7 @@ import {
 } from "../lib/config.ts";
 import { mapWithConcurrency, parseConcurrency } from "../lib/concurrency.ts";
 import { renderComparisonReport, renderSummaryTable } from "../lib/render.ts";
+import { runFromNode, variantFromRuns, variantRuns } from "../lib/runs.ts";
 import { LabStore } from "../lib/store.ts";
 import { appendTurn, forkBranch } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
@@ -47,8 +48,22 @@ export async function runCompareRetry(
       throw new Error(`--only 里的 ${name} 不在对比 ${comparisonId} 的配置中（${spec.configs.join(", ")}）`);
     }
   }
-  const targets = only.length > 0 ? variants.filter((v) => only.includes(v.configName)) : variants.filter((v) => v.error !== null);
-  if (targets.length === 0) {
+  // 目标是「采样」而不是「路」：--repeat 的路只补跑失败的那几次；--only 指定的路每一次都重跑。
+  type Job = { variant: ComparisonVariant; runIndex: number; run: VariantRun };
+  const jobs: Job[] = [];
+  for (const variant of variants) {
+    const runs = variantRuns(variant);
+    const forced = only.includes(variant.configName);
+    if (only.length > 0 && !forced) {
+      continue;
+    }
+    runs.forEach((run, runIndex) => {
+      if (forced || run.error !== null) {
+        jobs.push({ variant, runIndex, run });
+      }
+    });
+  }
+  if (jobs.length === 0) {
     log(chalk.dim(`对比 ${comparisonId} 没有失败的路，无需补跑（要强制重跑用 --only a,b）`));
     return;
   }
@@ -56,15 +71,18 @@ export async function runCompareRetry(
   const timeoutMs = parseTimeoutMs(options.timeoutMs);
   const maxRetries = parseMaxRetries(options.maxRetries);
   const concurrency = parseConcurrency(options.concurrency);
+  const repeated = spec.repeat !== undefined && spec.repeat > 1;
+  const label = (job: Job): string =>
+    repeated ? `${job.variant.configName}#${String(job.runIndex + 1)}` : job.variant.configName;
 
-  // 准备每路：原快照 + 密钥；分支头回到 fromNodeId，新节点仍以它为父。
-  const tasks = targets.map((variant) => {
-    const nodeId = variant.nodeId;
+  // 准备每个采样：原节点快照 + 当前密钥；分支头回到 fromNodeId，新节点仍以它为父。
+  const tasks = jobs.map((job) => {
+    const nodeId = job.run.nodeId;
     if (nodeId === null) {
-      throw new Error(`对比 ${comparisonId} 的 ${variant.configName} 没有节点，无法补跑`);
+      throw new Error(`对比 ${comparisonId} 的 ${label(job)} 没有节点，无法补跑`);
     }
     const previous = store.getNode(sessionId, nodeId);
-    const peeked = peekConfigRef(root, variant.configName);
+    const peeked = peekConfigRef(root, job.variant.configName);
     const apiKey = process.env[peeked.apiKeyEnv];
     if (apiKey === undefined || apiKey === "") {
       throw new Error(`缺少 API Key：请设置环境变量 ${peeked.apiKeyEnv}（可复制 .env.example 为 .env）`);
@@ -72,16 +90,16 @@ export async function runCompareRetry(
     const config: ResolvedConfig = { ...previous.config, apiKey, apiKeyEnv: peeked.apiKeyEnv };
     if (timeoutMs !== undefined) config.timeoutMs = timeoutMs;
     if (maxRetries !== undefined) config.maxRetries = maxRetries;
-    const branchName = safeVariantName(variant.configName);
+    const branchName = safeVariantName(job.variant.configName);
     if (!store.branchExists(sessionId, branchName)) {
       forkBranch(store, sessionId, branchName, spec.fromNodeId);
     } else {
       store.writeBranch(sessionId, { ...store.getBranch(sessionId, branchName), head: spec.fromNodeId });
     }
-    return { ref: variant.configName, config, branchName, systemText: previous.messages.system };
+    return { job, config, branchName, systemText: previous.messages.system };
   });
 
-  log(chalk.dim(`补跑 ${String(tasks.length)} 路：${tasks.map((t) => t.ref).join(", ")}，并发 ${String(concurrency)}`));
+  log(chalk.dim(`补跑 ${String(tasks.length)} 个采样：${tasks.map((t) => label(t.job)).join(", ")}，并发 ${String(concurrency)}`));
   const startedAt = Date.now();
   const reran = await mapWithConcurrency(tasks, concurrency, async (task) => {
     const begin = Date.now();
@@ -100,30 +118,36 @@ export async function runCompareRetry(
     });
     const elapsed = ((Date.now() - begin) / 1000).toFixed(1);
     if (node.error !== null) {
-      log(chalk.red(`失败 ${task.ref} ${elapsed}s：${node.error}`));
+      log(chalk.red(`失败 ${label(task.job)} ${elapsed}s：${node.error}`));
     } else {
-      log(chalk.dim(`完成 ${task.ref} ${elapsed}s`));
+      log(chalk.dim(`完成 ${label(task.job)} ${elapsed}s`));
     }
-    const variant: ComparisonVariant = {
-      configName: task.ref,
-      config: node.config,
-      assistant: node.messages.assistant,
-      reasoning: node.messages.reasoning,
-      usage: node.usage,
-      latencyMs: node.latencyMs,
-      error: node.error,
-      nodeId: node.id,
-      cost: node.cost,
-      requestId: node.requestId,
-    };
-    return variant;
+    return { job: task.job, config: node.config, run: runFromNode(node) };
   });
   store.touchSession(sessionId);
 
-  const byName = new Map(reran.map((v) => [v.configName, v]));
-  const merged = variants.map((v) => byName.get(v.configName) ?? v);
-  for (const variant of reran) {
-    store.writeVariant(spec.id, variant);
+  // 把新采样按位置放回各路，重建顶层字段（第 1 次）。
+  const touched = new Set(reran.map((r) => r.job.variant.configName));
+  const merged = variants.map((variant) => {
+    if (!touched.has(variant.configName)) {
+      return variant;
+    }
+    const runs = [...variantRuns(variant)];
+    let config = variant.config;
+    for (const r of reran) {
+      if (r.job.variant.configName === variant.configName) {
+        runs[r.job.runIndex] = r.run;
+        if (r.job.runIndex === 0) {
+          config = r.config;
+        }
+      }
+    }
+    return variantFromRuns(variant.configName, config, runs);
+  });
+  for (const variant of merged) {
+    if (touched.has(variant.configName)) {
+      store.writeVariant(spec.id, variant);
+    }
   }
   const droppedScores = store.deleteScores(spec.id);
   store.writeComparisonReport(spec.id, renderComparisonReport(spec, merged));
