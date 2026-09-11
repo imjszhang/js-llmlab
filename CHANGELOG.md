@@ -8,6 +8,7 @@
 
 - `appendTurn` / `run` / `compare` 可注入 completer；新增 `tests/fake-completer.ts`，编排逻辑可离线测试（#1）。
 - `run` / `compare` 新增 `--dry-run`：打印配置快照、密钥状态、messages 与请求体 JSON，不发请求、不落盘；CI 冒烟改用它（#2）。
+- 测试基础设施：脱敏 fixture `tests/fixtures/polish-8way`、`scripts/export-fixture.ts`（`npm run fixture:export`）、黄金文件比对 `tests/golden.ts`（`npm run test:update-golden`）；`LabStore.readComparison` 可读回对比；落盘 JSON 解析集中到 `src/lib/parse.ts`（#3）。
 - GitHub 工程骨架：CI（typecheck + test + 离线冒烟，Node 20 / 22）、issue 与 PR 模板、`master` 分支保护、四个里程碑与 14 个带验收标准的 issue。
 
 ## [0.1.0] - 2026-09-11
