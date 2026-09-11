@@ -1,6 +1,6 @@
 {
   "name": "js-llmlab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "本地 CLI 实验室：对接 OpenAI 兼容接口，做提示词预设、会话分支与配置对比。",
