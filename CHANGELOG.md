@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-11
+
+M3 稳健与可发现：网关抽风有重试、有 raw 可查、有 retry 可补；结果有 ls / show 可找；`run` 能流式、能看进度；同请求的路自动合并。
+
 ### Added
 
 - `compare --repeat <n>`：每路采样 n 次（总任务 = 路数 × n，与 `--concurrency` 叠加），每次都以 `fromNodeId` 为父。汇总表每路仍一行，耗时 / token / 成本列为 `均值 (最小–最大)`（只算成功次数），错误列 `k/n 失败`；`spec.repeat`、`meta.json.runs`、`variants/<配置>/run-<k>.md` 只在 n > 1 时出现，`output.md` 保留第 1 次。`compare score` 对每次成稿分别算并给均值（`scores.json` 的 `runs`），报表相似度 / 改动率列同样 `均值 (最小–最大)`；`compare retry` 只补跑失败的那几次采样。`--repeat 1` 与不带参数完全一致（#9）。
