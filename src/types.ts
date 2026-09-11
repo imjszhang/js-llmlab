@@ -25,6 +25,10 @@ export type ConfigSnapshot = {
   maxTokens: number;
   thinking: ThinkingMode | null;
   reasoningEffort: ReasoningEffort | null;
+  /** 单次请求超时（ms），交给 SDK；缺省 600000。 */
+  timeoutMs: number;
+  /** 失败后在我们这一层重试的次数（SDK 自身重试关掉）；缺省 2。 */
+  maxRetries: number;
   /** 没配价格就没有这个 key。 */
   pricing?: Pricing;
 };
@@ -39,6 +43,8 @@ export type NamedConfigFile = {
   apiKeyEnv?: string;
   thinking?: ThinkingMode;
   reasoningEffort?: ReasoningEffort;
+  timeoutMs?: number;
+  maxRetries?: number;
   pricing?: Pricing;
 };
 
@@ -50,6 +56,8 @@ export type CliConfigOverrides = {
   maxTokens?: number;
   thinking?: ThinkingMode;
   reasoningEffort?: ReasoningEffort;
+  timeoutMs?: number;
+  maxRetries?: number;
 };
 
 export type ResolvedConfig = ConfigSnapshot & {
@@ -194,6 +202,8 @@ export type SharedCliOptions = {
   maxTokens?: string;
   thinking?: string;
   reasoningEffort?: string;
+  timeoutMs?: string;
+  maxRetries?: string;
   from?: string;
   /** 只打印解析后的配置与请求体，不发请求、不落盘。 */
   dryRun?: boolean;

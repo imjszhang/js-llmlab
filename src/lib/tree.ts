@@ -2,9 +2,13 @@ import type { ChatMessage, ResolvedConfig, SessionNode } from "../types.ts";
 import {
   formatError,
   runCompletion,
+  withRetries,
   type Completer,
   type CompletionOptions,
 } from "./client.ts";
+
+/** 不经命令层注入时（chat）用的缺省 completer：真实网关 + 按配置重试。 */
+const defaultCompleter: Completer = withRetries(runCompletion);
 import { createId } from "./ids.ts";
 import { toSnapshot } from "./config.ts";
 import { computeCost } from "./cost.ts";
@@ -101,7 +105,7 @@ export async function appendTurn(params: {
     userPreset,
     userText,
   } = params;
-  const complete = params.complete ?? runCompletion;
+  const complete = params.complete ?? defaultCompleter;
   const branch = store.getBranch(sessionId, branchName);
   const parentId = params.parentId !== undefined ? params.parentId : branch.head;
   if (parentId !== null) {

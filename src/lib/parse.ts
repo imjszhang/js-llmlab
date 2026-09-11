@@ -10,6 +10,7 @@ import type {
   TokenUsage,
   VariantScore,
 } from "../types.ts";
+import { DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS } from "./config.ts";
 
 /**
  * 落盘 JSON → 类型。老文件缺字段时给默认值，新字段只加不删，
@@ -107,6 +108,9 @@ export function parseConfigSnapshot(raw: unknown, field = "config"): ConfigSnaps
       raw.reasoningEffort === "low" || raw.reasoningEffort === "high" || raw.reasoningEffort === "max"
         ? raw.reasoningEffort
         : null,
+    // 老快照没有这两项 → 默认值。
+    timeoutMs: nullableNumber(raw.timeoutMs) ?? DEFAULT_TIMEOUT_MS,
+    maxRetries: nullableNumber(raw.maxRetries) ?? DEFAULT_MAX_RETRIES,
   };
   const pricing = parsePricingRecord(raw.pricing);
   if (pricing !== undefined) {

@@ -5,6 +5,7 @@ import { runCompare } from "./commands/compare.ts";
 import { runConfigLs, runConfigShow } from "./commands/config.ts";
 import { runModels } from "./commands/models.ts";
 import { runProviderLs, runProviderShow } from "./commands/provider.ts";
+import { runCompareRetry, type RetryCliOptions } from "./commands/retry.ts";
 import { runOnce } from "./commands/run.ts";
 import { runCompareScore, type ScoreCliOptions } from "./commands/score.ts";
 import { runSessionLs, runSessionShow } from "./commands/session.ts";
@@ -24,7 +25,9 @@ function addSharedOptions(command: Command): Command {
     .option("--temperature <n>", "覆盖温度")
     .option("--max-tokens <n>", "覆盖 maxTokens")
     .option("--thinking <mode>", "enabled 或 disabled")
-    .option("--reasoning-effort <level>", "low、high 或 max");
+    .option("--reasoning-effort <level>", "low、high 或 max")
+    .option("--timeout-ms <n>", "单次请求超时毫秒，缺省 600000")
+    .option("--max-retries <n>", "失败重试次数，缺省 2");
 }
 
 type StringOptionKey = {
@@ -54,6 +57,8 @@ function toShared(options: Record<string, unknown>): SharedCliOptions {
   assign("maxTokens", options.maxTokens);
   assign("thinking", options.thinking);
   assign("reasoningEffort", options.reasoningEffort);
+  assign("timeoutMs", options.timeoutMs);
+  assign("maxRetries", options.maxRetries);
   assign("from", options.from);
   assign("concurrency", options.concurrency);
   if (typeof options.dryRun === "boolean") {
@@ -188,6 +193,24 @@ async function main(): Promise<void> {
         }
       }
       await runCompareScore(comparison, scoreOptions);
+    });
+
+  compare
+    .command("retry <comparison>")
+    .description("补跑已有对比里失败的路（或 --only 指定的路），更新 variant 与 report.md")
+    .option("--only <names>", "逗号分隔的配置名，无论成败都重跑")
+    .option("--concurrency <n>", "并发路数，缺省 3")
+    .option("--timeout-ms <n>", "覆盖超时毫秒")
+    .option("--max-retries <n>", "覆盖重试次数")
+    .action(async (comparison: string, options: Record<string, unknown>) => {
+      const retryOptions: RetryCliOptions = {};
+      for (const key of ["only", "concurrency", "timeoutMs", "maxRetries"] as const) {
+        const value = options[key];
+        if (typeof value === "string") {
+          retryOptions[key] = value;
+        }
+      }
+      await runCompareRetry(comparison, retryOptions);
     });
 
   await program.parseAsync(process.argv);

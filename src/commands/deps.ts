@@ -1,4 +1,11 @@
-import { runCompletion, type Completer } from "../lib/client.ts";
+import chalk from "chalk";
+import {
+  formatError,
+  runCompletion,
+  withRetries,
+  type Completer,
+  type RetryOptions,
+} from "../lib/client.ts";
 import { findProjectRoot } from "../lib/paths.ts";
 
 /**
@@ -7,7 +14,10 @@ import { findProjectRoot } from "../lib/paths.ts";
  */
 export type CommandDeps = {
   root?: string;
+  /** 原始 completer；resolveDeps 会按配置的 maxRetries 包一层重试。 */
   complete?: Completer;
+  /** 重试退避基数（ms）；测试传 0 不睡觉。 */
+  retryBaseDelayMs?: number;
   log?: (line: string) => void;
   error?: (line: string) => void;
 };
@@ -20,14 +30,28 @@ export type ResolvedDeps = {
 };
 
 export function resolveDeps(deps: CommandDeps | undefined): ResolvedDeps {
+  const log =
+    deps?.log ??
+    ((line: string): void => {
+      console.log(line);
+    });
+  const error =
+    deps?.error ??
+    ((line: string): void => {
+      console.error(line);
+    });
+  const retryOptions: RetryOptions = {
+    onRetry: ({ config, attempt, maxRetries, error: cause }) => {
+      log(chalk.yellow(`重试 ${String(attempt)}/${String(maxRetries)} ${config.name}：${formatError(cause)}`));
+    },
+  };
+  if (deps?.retryBaseDelayMs !== undefined) {
+    retryOptions.baseDelayMs = deps.retryBaseDelayMs;
+  }
   return {
     root: deps?.root ?? findProjectRoot(),
-    complete: deps?.complete ?? runCompletion,
-    log: deps?.log ?? ((line: string): void => {
-      console.log(line);
-    }),
-    error: deps?.error ?? ((line: string): void => {
-      console.error(line);
-    }),
+    complete: withRetries(deps?.complete ?? runCompletion, retryOptions),
+    log,
+    error,
   };
 }

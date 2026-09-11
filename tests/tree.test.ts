@@ -24,6 +24,8 @@ function node(
       maxTokens: 16,
       thinking: null,
       reasoningEffort: null,
+      timeoutMs: 600000,
+      maxRetries: 2,
     },
     systemPreset: "default",
     userPreset: null,

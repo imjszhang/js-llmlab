@@ -84,6 +84,7 @@ test("resolveConfig 需要 API Key，快照不含密钥", () => {
       assert.equal("apiKey" in snapshot, false);
       assert.deepEqual(Object.keys(snapshot).sort(), [
         "baseURL",
+        "maxRetries",
         "maxTokens",
         "model",
         "name",
@@ -91,6 +92,7 @@ test("resolveConfig 需要 API Key，快照不含密钥", () => {
         "reasoningEffort",
         "temperature",
         "thinking",
+        "timeoutMs",
       ]);
     },
   );

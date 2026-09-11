@@ -98,6 +98,8 @@ test("buildChatRequest：可选字段缺省不出现，流式带 include_usage",
     maxTokens: 128,
     thinking: null,
     reasoningEffort: null,
+    timeoutMs: 600000,
+    maxRetries: 2,
   };
   const messages = [{ role: "user" as const, content: "hi" }];
 

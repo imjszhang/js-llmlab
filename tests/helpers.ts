@@ -85,6 +85,8 @@ export function makeCommandLab(): { root: string; env: Record<string, string | u
     model: "demo",
     temperature: 0.3,
     maxTokens: 64,
+    // 假实验室缺省不重试，让 failTimes: 1 的用例保持确定性；重试用例自己开。
+    maxRetries: 0,
   });
   writeJson(path.join(root, "configs", "a.json"), { name: "a", provider: "test", model: "model-a" });
   writeJson(path.join(root, "configs", "b.json"), { name: "b", provider: "test", model: "model-b" });

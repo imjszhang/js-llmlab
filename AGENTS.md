@@ -59,6 +59,7 @@ npx tsx src/cli.ts compare --configs ds-v4-flash,ds-v4-pro --message '...'
 npx tsx src/cli.ts compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 并行路数，缺省 3
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt   # 离线算相似度 / 改动率，不发请求
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason --concurrency 8   # LLM 裁判，会发请求
+npx tsx src/cli.ts compare retry <c_id> [--only a,b]   # 只补跑失败路；--only 指定的路无论成败都重跑
 npx tsx src/cli.ts session ls
 npx tsx src/cli.ts session show <id>
 ```
@@ -83,11 +84,13 @@ fixture 与黄金文件：
 后者覆盖前者：
 
 1. `providers/<name>.json`：`baseURL`、`apiKeyEnv`、默认模型
-2. `configs/<name>.json`：引用 `provider`，再写 `model` / `temperature` / `maxTokens` / `thinking` / `reasoningEffort`
+2. `configs/<name>.json`：引用 `provider`，再写 `model` / `temperature` / `maxTokens` / `thinking` / `reasoningEffort` / `timeoutMs` / `maxRetries`
 3. 没有对应配置文件时，名称当 **模型 id**，走当前或 `--provider`
-4. CLI 覆盖：`--provider`、`--temperature`、`--max-tokens`、`--thinking`、`--reasoning-effort`
+4. CLI 覆盖：`--provider`、`--temperature`、`--max-tokens`、`--thinking`、`--reasoning-effort`、`--timeout-ms`、`--max-retries`
 
 `thinking` 只有 `enabled` | `disabled`。`reasoningEffort` 只有 `low` | `high` | `max`。V4 开推理 **不是** 新的 model id。
+
+`timeoutMs`（缺省 600000）给 SDK 做单次超时；`maxRetries`（缺省 2）是 `withRetries` 在我们这一层做的指数退避（1s、2s、4s），SDK 的 `maxRetries` 固定 0。两项进快照，老节点缺字段读成默认值；它们不参与 compare 的快照去重。测试里 `makeCommandLab` 的 provider 显式 `maxRetries: 0`，要测重试就在配置里开，并给 deps 传 `retryBaseDelayMs: 0`。
 
 可选 `pricing: { inputPerMillion, outputPerMillion, currency }`（每百万 token，currency 缺省 CNY）可写在 provider 或 config，config 覆盖 provider。配了就有节点 `cost` 与报表「成本」列；没配是 `null` / `-`。价格是数据不是代码，仓库不预置，用户要比性价比时让他自己填；别替他猜价格。
 
@@ -135,6 +138,8 @@ data/tmp/                      一次性输入
 节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token，`cost` 是按配置 pricing 算出的花费（没配为 null）。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
 
 compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
+
+某路失败（网关 5xx、超时）别整组重来：`compare retry <c_id>` 只补跑 `error != null` 的路，复用原 spec 的输入和节点里记录的 system 文本、原节点的配置快照（只允许 `--timeout-ms` / `--max-retries` 覆盖），新节点仍以 `fromNodeId` 为父，旧失败节点留在树里。补跑后 `report.md` 重渲染，`scores.json` 若存在会被删掉并提示重新打分。
 
 `compare score <c_id>` 是离线的：`similarity` 是与 `--reference` 文件的字符级 LCS 比（0–1，没给就是 null），`changeRatio` 是相对输入（或 `--baseline`）的改动比例，`barelyChanged` 表示改动 < 5%。写 `scores.json` 并给汇总表追加两列。它量的是「像不像」，不是「好不好」；「几乎没改」的路先怀疑 thinking 没开。
 

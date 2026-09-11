@@ -34,6 +34,8 @@ export function runConfigShow(ref: string): void {
   console.log(`maxTokens: ${String(snap.maxTokens)}`);
   console.log(`thinking: ${snap.thinking ?? "null"}`);
   console.log(`reasoningEffort: ${snap.reasoningEffort ?? "null"}`);
+  console.log(`timeoutMs: ${String(snap.timeoutMs)}`);
+  console.log(`maxRetries: ${String(snap.maxRetries)}`);
   console.log(
     snap.pricing === undefined
       ? "pricing: 未配置（在 provider 或 config JSON 里加 pricing 后节点与报表会算成本）"

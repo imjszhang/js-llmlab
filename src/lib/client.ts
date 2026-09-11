@@ -33,7 +33,70 @@ export function createClient(config: ResolvedConfig): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
+    timeout: config.timeoutMs,
+    // 重试在 withRetries 里做，SDK 自己的关掉，避免双重重试。
+    maxRetries: 0,
   });
+}
+
+export const DEFAULT_RETRY_BASE_MS = 1000;
+
+export type RetryOptions = {
+  /** 第 k 次重试前等 baseDelayMs × 2^(k-1)；测试传 0。缺省 1000。 */
+  baseDelayMs?: number;
+  /** 每次重试前回调，用来打日志。 */
+  onRetry?: (info: { config: ResolvedConfig; attempt: number; maxRetries: number; error: unknown }) => void;
+  /** 可注入的 sleep，缺省 setTimeout。 */
+  sleep?: (ms: number) => Promise<void>;
+};
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * 给任意 completer 加指数退避重试，次数取 `config.maxRetries`。
+ * 流式一旦已经吐出内容就不再重试（否则终端会重复打印），直接把错误抛给调用方。
+ */
+export function withRetries(complete: Completer, options: RetryOptions = {}): Completer {
+  const baseDelayMs = options.baseDelayMs ?? DEFAULT_RETRY_BASE_MS;
+  const sleep = options.sleep ?? defaultSleep;
+  return async (config, messages, completionOptions = {}) => {
+    let streamed = false;
+    const guarded: CompletionOptions = { ...completionOptions };
+    if (completionOptions.onDelta !== undefined) {
+      const inner = completionOptions.onDelta;
+      guarded.onDelta = (chunk) => {
+        streamed = true;
+        inner(chunk);
+      };
+    }
+    if (completionOptions.onReasoningDelta !== undefined) {
+      const inner = completionOptions.onReasoningDelta;
+      guarded.onReasoningDelta = (chunk) => {
+        streamed = true;
+        inner(chunk);
+      };
+    }
+    let attempt = 0;
+    for (;;) {
+      try {
+        return await complete(config, messages, guarded);
+      } catch (error) {
+        if (streamed || attempt >= config.maxRetries) {
+          throw error;
+        }
+        attempt += 1;
+        options.onRetry?.({ config, attempt, maxRetries: config.maxRetries, error });
+        const delay = baseDelayMs * 2 ** (attempt - 1);
+        if (delay > 0) {
+          await sleep(delay);
+        }
+      }
+    }
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
