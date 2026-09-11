@@ -89,6 +89,8 @@ fixture 与黄金文件：
 
 `thinking` 只有 `enabled` | `disabled`。`reasoningEffort` 只有 `low` | `high` | `max`。V4 开推理 **不是** 新的 model id。
 
+可选 `pricing: { inputPerMillion, outputPerMillion, currency }`（每百万 token，currency 缺省 CNY）可写在 provider 或 config，config 覆盖 provider。配了就有节点 `cost` 与报表「成本」列；没配是 `null` / `-`。价格是数据不是代码，仓库不预置，用户要比性价比时让他自己填；别替他猜价格。
+
 `compare` 注意：
 
 - `--model` **不会**冲掉每一路的模型
@@ -130,7 +132,7 @@ data/comparisons/<c_id>/       spec.json、report.md（汇总表 + Input + 各�
 data/tmp/                      一次性输入
 ```
 
-节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
+节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token，`cost` 是按配置 pricing 算出的花费（没配为 null）。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
 
 compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
 

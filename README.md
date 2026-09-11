@@ -64,6 +64,20 @@ js-llmlab compare --suite deepseek --message '用一句话解释注意力'
 
 落盘快照含 `provider` / `name` / `baseURL` / `model` / `temperature` / `maxTokens`，不含 API Key。
 
+### 价格与成本
+
+在 `providers/<name>.json` 或 `configs/<name>.json` 里加可选的 `pricing`（config 覆盖 provider，只写 provider 也生效）：
+
+```json
+{
+  "pricing": { "inputPerMillion": 1, "outputPerMillion": 4, "currency": "CNY" }
+}
+```
+
+单位是每百万 token，`currency` 缺省 `CNY`。配了之后每个节点多一个 `cost: { input, output, total, currency }`，turn md、`report.md` 汇总表与 `compare` 终端输出多一列「成本」；没配就是 `null` / `-`，不会算成 0。推理 token 按 OpenAI 兼容口径已含在 `completion_tokens` 里，按 output 价计，不重复计。`config show <name>` 会打出当前生效的 pricing。
+
+价格自己填、自己维护，仓库不预置；**网关实际计费以账单为准**，这里只用来横向比性价比。
+
 ## 命令
 
 ```bash
@@ -113,7 +127,7 @@ data/tmp/                  # 一次性输入草稿，不进 git
 
 每个会话是一棵树。发请求时用当前 system + 祖先链上的 user/assistant。请求失败也会落盘。
 
-`report.md` 开头是一张汇总表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误），`compare` 结束时终端也打这张表。
+`report.md` 开头是一张汇总表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误），`compare` 结束时终端也打这张表。
 
 `compare` 各路并行发请求，缺省并发 3，`--concurrency <n>` 可调；结果始终按输入顺序写入，与完成顺序无关。终端每路开始、结束各打一行，结束行带耗时与是否出错。
 

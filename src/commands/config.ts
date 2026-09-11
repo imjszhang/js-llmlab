@@ -34,6 +34,11 @@ export function runConfigShow(ref: string): void {
   console.log(`maxTokens: ${String(snap.maxTokens)}`);
   console.log(`thinking: ${snap.thinking ?? "null"}`);
   console.log(`reasoningEffort: ${snap.reasoningEffort ?? "null"}`);
+  console.log(
+    snap.pricing === undefined
+      ? "pricing: 未配置（在 provider 或 config JSON 里加 pricing 后节点与报表会算成本）"
+      : `pricing: 输入 ${String(snap.pricing.inputPerMillion)} / 输出 ${String(snap.pricing.outputPerMillion)} ${snap.pricing.currency} 每百万 token`,
+  );
   console.log(`apiKeyEnv: ${peeked.apiKeyEnv}`);
   console.log(`apiKey: ${peeked.apiKeyPresent ? "已设置" : "未设置"}`);
 }

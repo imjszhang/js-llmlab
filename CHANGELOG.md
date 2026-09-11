@@ -7,6 +7,7 @@
 ### Added
 
 - `compare score <c_id> [--reference <file>] [--baseline <file>]`：对已有对比离线算 `similarity`（字符级 LCS）、`changeRatio`、`barelyChanged`，写 `scores.json`，报表汇总表追加「相似度 | 改动率」列；不发请求（#6）。
+- provider / config 支持可选 `pricing: { inputPerMillion, outputPerMillion, currency }`（config 覆盖 provider）；节点新增 `cost: { input, output, total, currency } | null`；turn md、报表汇总表与 `compare` 终端多一列「成本」；`config show` 打印 pricing。价格不预置，网关实际计费以账单为准（#8）。
 - `compare score --judge <config> [--rubric <name>] [--concurrency <n>]`：LLM 裁判逐路打 0–10 分，rubric 在 `prompts/judge/<name>.md`（新增 `default`），结果进 `scores.json` 的 `judge` 字段与汇总表「裁判」列，报表末尾附裁判理由；裁判调用落到 `judge: <c_id>` 会话。JSON 解析对中文引号等常见错误有兜底（#7）。
 
 ## [0.3.0] - 2026-09-11

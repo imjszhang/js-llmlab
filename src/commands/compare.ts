@@ -153,6 +153,7 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
       latencyMs: node.latencyMs,
       error: node.error,
       nodeId: node.id,
+      cost: node.cost,
     };
     return variant;
   });

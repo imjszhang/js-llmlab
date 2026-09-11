@@ -211,6 +211,7 @@ export class LabStore {
         latencyMs: variant.latencyMs,
         error: variant.error,
         nodeId: variant.nodeId,
+        cost: variant.cost,
       });
       writeFileSync(path.join(variantDir, "output.md"), renderVariantMarkdown(variant), "utf8");
       const reasoningPath = path.join(variantDir, "reasoning.md");
@@ -283,6 +284,7 @@ export class LabStore {
         latencyMs: node.latencyMs,
         error: node.error,
         nodeId,
+        cost: node.cost,
       };
       return variant;
     });

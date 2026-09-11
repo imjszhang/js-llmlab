@@ -7,6 +7,7 @@ import type {
   ConfigRefPeek,
   ConfigSnapshot,
   NamedConfigFile,
+  Pricing,
   ReasoningEffort,
   ResolvedConfig,
   SharedCliOptions,
@@ -59,6 +60,7 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   const apiKeyEnv = optionalString(raw.apiKeyEnv);
   const thinking = parseThinkingMode(raw.thinking);
   const reasoningEffort = parseReasoningEffort(raw.reasoningEffort);
+  const pricing = parsePricing(raw.pricing);
   if (name !== undefined) parsed.name = name;
   if (provider !== undefined) parsed.provider = provider;
   if (baseURL !== undefined) parsed.baseURL = baseURL;
@@ -68,7 +70,28 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   if (apiKeyEnv !== undefined) parsed.apiKeyEnv = apiKeyEnv;
   if (thinking !== undefined) parsed.thinking = thinking;
   if (reasoningEffort !== undefined) parsed.reasoningEffort = reasoningEffort;
+  if (pricing !== undefined) parsed.pricing = pricing;
   return parsed;
+}
+
+/** `pricing: { inputPerMillion, outputPerMillion, currency? }`，currency 缺省 CNY。 */
+export function parsePricing(value: unknown): Pricing | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error("pricing 必须是对象：{ inputPerMillion, outputPerMillion, currency }");
+  }
+  const inputPerMillion = optionalNumber(value.inputPerMillion);
+  const outputPerMillion = optionalNumber(value.outputPerMillion);
+  if (inputPerMillion === undefined || outputPerMillion === undefined || inputPerMillion < 0 || outputPerMillion < 0) {
+    throw new Error("pricing.inputPerMillion 与 pricing.outputPerMillion 必须是 ≥ 0 的数字");
+  }
+  return {
+    inputPerMillion,
+    outputPerMillion,
+    currency: optionalString(value.currency) ?? "CNY",
+  };
 }
 
 export function parseThinkingMode(value: unknown): ThinkingMode | undefined {
@@ -226,6 +249,7 @@ function mergeConfig(base: NamedConfigFile, overlay: NamedConfigFile): NamedConf
   if (overlay.apiKeyEnv !== undefined) merged.apiKeyEnv = overlay.apiKeyEnv;
   if (overlay.thinking !== undefined) merged.thinking = overlay.thinking;
   if (overlay.reasoningEffort !== undefined) merged.reasoningEffort = overlay.reasoningEffort;
+  if (overlay.pricing !== undefined) merged.pricing = overlay.pricing;
   return merged;
 }
 
@@ -251,7 +275,7 @@ export function pickProviderName(
 }
 
 function finalizeSnapshot(merged: NamedConfigFile, fallbackName: string): ConfigSnapshot {
-  return {
+  const snapshot: ConfigSnapshot = {
     name: merged.name ?? fallbackName,
     provider: merged.provider ?? null,
     baseURL: merged.baseURL ?? DEFAULT_BASE_URL,
@@ -261,6 +285,10 @@ function finalizeSnapshot(merged: NamedConfigFile, fallbackName: string): Config
     thinking: merged.thinking ?? null,
     reasoningEffort: merged.reasoningEffort ?? null,
   };
+  if (merged.pricing !== undefined) {
+    snapshot.pricing = merged.pricing;
+  }
+  return snapshot;
 }
 
 export function peekConfig(
@@ -369,7 +397,7 @@ export function compareOverridesFromCli(options: SharedCliOptions): CliConfigOve
 }
 
 export function toSnapshot(config: ResolvedConfig): ConfigSnapshot {
-  return {
+  const snapshot: ConfigSnapshot = {
     name: config.name,
     provider: config.provider,
     baseURL: config.baseURL,
@@ -379,6 +407,10 @@ export function toSnapshot(config: ResolvedConfig): ConfigSnapshot {
     thinking: config.thinking,
     reasoningEffort: config.reasoningEffort,
   };
+  if (config.pricing !== undefined) {
+    snapshot.pricing = config.pricing;
+  }
+  return snapshot;
 }
 
 export function overridesFromCli(options: SharedCliOptions): CliConfigOverrides {

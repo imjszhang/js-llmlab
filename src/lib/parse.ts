@@ -3,7 +3,9 @@ import type {
   ComparisonSpec,
   ComparisonVariant,
   ConfigSnapshot,
+  Cost,
   JudgeVerdict,
+  Pricing,
   SessionNode,
   TokenUsage,
   VariantScore,
@@ -16,6 +18,10 @@ import type {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function requireString(value: unknown, field: string): string {
@@ -50,11 +56,46 @@ export function parseUsage(raw: unknown): TokenUsage | null {
   };
 }
 
+export function parsePricingRecord(raw: unknown): Pricing | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const inputPerMillion = nullableNumber(raw.inputPerMillion);
+  const outputPerMillion = nullableNumber(raw.outputPerMillion);
+  if (inputPerMillion === null || outputPerMillion === null) {
+    return undefined;
+  }
+  return {
+    inputPerMillion,
+    outputPerMillion,
+    currency: typeof raw.currency === "string" ? raw.currency : "CNY",
+  };
+}
+
+/** 老节点没有 cost 字段 → null。 */
+export function parseCost(raw: unknown): Cost | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const input = nullableNumber(raw.input);
+  const output = nullableNumber(raw.output);
+  const total = nullableNumber(raw.total);
+  if (input === null || output === null || total === null) {
+    return null;
+  }
+  return {
+    input,
+    output,
+    total,
+    currency: typeof raw.currency === "string" ? raw.currency : "CNY",
+  };
+}
+
 export function parseConfigSnapshot(raw: unknown, field = "config"): ConfigSnapshot {
   if (!isRecord(raw)) {
     throw new Error(`${field} 格式无效`);
   }
-  return {
+  const snapshot: ConfigSnapshot = {
     name: requireString(raw.name, `${field}.name`),
     provider: requireNullableString(raw.provider, `${field}.provider`),
     baseURL: requireString(raw.baseURL, `${field}.baseURL`),
@@ -67,6 +108,11 @@ export function parseConfigSnapshot(raw: unknown, field = "config"): ConfigSnaps
         ? raw.reasoningEffort
         : null,
   };
+  const pricing = parsePricingRecord(raw.pricing);
+  if (pricing !== undefined) {
+    snapshot.pricing = pricing;
+  }
+  return snapshot;
 }
 
 export function parseSessionNode(raw: unknown): SessionNode {
@@ -89,6 +135,7 @@ export function parseSessionNode(raw: unknown): SessionNode {
     usage: parseUsage(raw.usage),
     latencyMs: Number(raw.latencyMs),
     error: requireNullableString(raw.error, "error"),
+    cost: parseCost(raw.cost),
   };
 }
 
@@ -106,10 +153,6 @@ export function parseComparisonSpec(raw: unknown): ComparisonSpec {
     sessionId: requireNullableString(raw.sessionId, "sessionId"),
     fromNodeId: requireNullableString(raw.fromNodeId, "fromNodeId"),
   };
-}
-
-function nullableNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function parseJudgeVerdict(raw: unknown): JudgeVerdict {
@@ -181,5 +224,6 @@ export function parseComparisonVariant(raw: unknown): ComparisonVariant {
     latencyMs: Number(raw.latencyMs),
     error: requireNullableString(raw.error, "error"),
     nodeId: requireNullableString(raw.nodeId, "nodeId"),
+    cost: parseCost(raw.cost),
   };
 }

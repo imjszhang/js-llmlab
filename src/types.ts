@@ -1,6 +1,21 @@
 export type ThinkingMode = "enabled" | "disabled";
 export type ReasoningEffort = "low" | "high" | "max";
 
+/** 每百万 token 的价格。推理 token 已含在 completion_tokens 里，按 output 计。 */
+export type Pricing = {
+  inputPerMillion: number;
+  outputPerMillion: number;
+  currency: string;
+};
+
+/** 一次调用的花费；无 pricing 时节点里是 null。 */
+export type Cost = {
+  input: number;
+  output: number;
+  total: number;
+  currency: string;
+};
+
 export type ConfigSnapshot = {
   name: string;
   provider: string | null;
@@ -10,6 +25,8 @@ export type ConfigSnapshot = {
   maxTokens: number;
   thinking: ThinkingMode | null;
   reasoningEffort: ReasoningEffort | null;
+  /** 没配价格就没有这个 key。 */
+  pricing?: Pricing;
 };
 
 export type NamedConfigFile = {
@@ -22,6 +39,7 @@ export type NamedConfigFile = {
   apiKeyEnv?: string;
   thinking?: ThinkingMode;
   reasoningEffort?: ReasoningEffort;
+  pricing?: Pricing;
 };
 
 export type CliConfigOverrides = {
@@ -75,6 +93,7 @@ export type SessionNode = {
   usage: TokenUsage | null;
   latencyMs: number;
   error: string | null;
+  cost: Cost | null;
 };
 
 export type SessionMeta = {
@@ -112,6 +131,7 @@ export type ComparisonVariant = {
   latencyMs: number;
   error: string | null;
   nodeId: string | null;
+  cost: Cost | null;
 };
 
 /** LLM 裁判对一路的裁决。解析失败或请求失败时 `score` 为 null、`error` 有值。 */
