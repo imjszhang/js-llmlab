@@ -114,6 +114,27 @@ export type ComparisonVariant = {
   nodeId: string | null;
 };
 
+/** `compare score` 对一路的离线指标。 */
+export type VariantScore = {
+  configName: string;
+  /** 与参考答案的相似度，0–1；没给 `--reference` 时为 null。 */
+  similarity: number | null;
+  /** 相对基线（缺省 spec.input）的改动比例，0–1。 */
+  changeRatio: number;
+  /** changeRatio < 0.05，几乎没改。 */
+  barelyChanged: boolean;
+};
+
+export type ComparisonScores = {
+  comparisonId: string;
+  /** 参考答案文件路径，或 null。 */
+  reference: string | null;
+  /** 基线文件路径；null 表示用 spec.input。 */
+  baseline: string | null;
+  scoredAt: string;
+  variants: VariantScore[];
+};
+
 export type SharedCliOptions = {
   session?: string;
   branch?: string;

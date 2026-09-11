@@ -1,9 +1,11 @@
 import type {
+  ComparisonScores,
   ComparisonSpec,
   ComparisonVariant,
   ConfigSnapshot,
   SessionNode,
   TokenUsage,
+  VariantScore,
 } from "../types.ts";
 
 /**
@@ -102,6 +104,39 @@ export function parseComparisonSpec(raw: unknown): ComparisonSpec {
     input: requireString(raw.input, "input"),
     sessionId: requireNullableString(raw.sessionId, "sessionId"),
     fromNodeId: requireNullableString(raw.fromNodeId, "fromNodeId"),
+  };
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function parseVariantScore(raw: unknown): VariantScore {
+  if (!isRecord(raw)) {
+    throw new Error("scores.variants[] 格式无效");
+  }
+  const ratio = nullableNumber(raw.changeRatio);
+  if (ratio === null) {
+    throw new Error("scores.variants[].changeRatio 必须是数字");
+  }
+  return {
+    configName: requireString(raw.configName, "configName"),
+    similarity: nullableNumber(raw.similarity),
+    changeRatio: ratio,
+    barelyChanged: raw.barelyChanged === true,
+  };
+}
+
+export function parseComparisonScores(raw: unknown): ComparisonScores {
+  if (!isRecord(raw) || !Array.isArray(raw.variants)) {
+    throw new Error("scores.json 格式无效");
+  }
+  return {
+    comparisonId: requireString(raw.comparisonId, "comparisonId"),
+    reference: requireNullableString(raw.reference, "reference"),
+    baseline: requireNullableString(raw.baseline, "baseline"),
+    scoredAt: requireString(raw.scoredAt, "scoredAt"),
+    variants: raw.variants.map((item) => parseVariantScore(item)),
   };
 }
 

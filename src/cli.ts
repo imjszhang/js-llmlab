@@ -6,6 +6,7 @@ import { runConfigLs, runConfigShow } from "./commands/config.ts";
 import { runModels } from "./commands/models.ts";
 import { runProviderLs, runProviderShow } from "./commands/provider.ts";
 import { runOnce } from "./commands/run.ts";
+import { runCompareScore, type ScoreCliOptions } from "./commands/score.ts";
 import { runSessionLs, runSessionShow } from "./commands/session.ts";
 import { runStatus } from "./commands/status.ts";
 import { readPackageVersion } from "./lib/version.ts";
@@ -154,10 +155,10 @@ async function main(): Promise<void> {
       runBranchCreate(args);
     });
 
-  addSharedOptions(
+  const compare = addSharedOptions(
     program
       .command("compare")
-      .description("同一输入、多配置或多模型对比")
+      .description("同一输入、多配置或多模型对比；子命令 score 对已有对比打分")
       .option("--suite <name>", "预定义对比组，例如 deepseek")
       .option("--configs <names>", "逗号分隔的配置名或模型 id")
       .option("--models <ids>", "逗号分隔的模型 id，可与 --configs/--suite 并用")
@@ -169,6 +170,22 @@ async function main(): Promise<void> {
   ).action(async (options: Record<string, unknown>) => {
     await runCompare(toShared(options));
   });
+
+  compare
+    .command("score <comparison>")
+    .description("对已有对比算相似度与改动率，写 scores.json 并更新 report.md；不发请求")
+    .option("--reference <file>", "参考答案文件；不给则相似度为 null")
+    .option("--baseline <file>", "改动率的基线文件；缺省用对比的输入")
+    .action(async (comparison: string, options: Record<string, unknown>) => {
+      const scoreOptions: ScoreCliOptions = {};
+      if (typeof options.reference === "string") {
+        scoreOptions.reference = options.reference;
+      }
+      if (typeof options.baseline === "string") {
+        scoreOptions.baseline = options.baseline;
+      }
+      await runCompareScore(comparison, scoreOptions);
+    });
 
   await program.parseAsync(process.argv);
 }
