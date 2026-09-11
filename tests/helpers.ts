@@ -27,7 +27,7 @@ export function writeText(filePath: string, text: string): void {
   writeFileSync(filePath, text, "utf8");
 }
 
-export function withEnv(env: Record<string, string | undefined>, fn: () => void): void {
+function applyEnv(env: Record<string, string | undefined>): Map<string, string | undefined> {
   const previous = new Map<string, string | undefined>();
   for (const key of Object.keys(env)) {
     previous.set(key, process.env[key]);
@@ -38,15 +38,63 @@ export function withEnv(env: Record<string, string | undefined>, fn: () => void)
       process.env[key] = value;
     }
   }
+  return previous;
+}
+
+function restoreEnv(previous: Map<string, string | undefined>): void {
+  for (const [key, value] of previous) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+export function withEnv(env: Record<string, string | undefined>, fn: () => void): void {
+  const previous = applyEnv(env);
   try {
     fn();
   } finally {
-    for (const [key, value] of previous) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
+    restoreEnv(previous);
   }
+}
+
+export async function withEnvAsync<T>(
+  env: Record<string, string | undefined>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const previous = applyEnv(env);
+  try {
+    return await fn();
+  } finally {
+    restoreEnv(previous);
+  }
+}
+
+/**
+ * 一个带 provider、两套命名配置和 default system 预设的临时实验室，
+ * 供命令层测试直接跑 run / compare。API key 走 `TEST_KEY`。
+ */
+export function makeCommandLab(): { root: string; env: Record<string, string | undefined> } {
+  const root = makeLabRoot();
+  writeJson(path.join(root, "providers", "test.json"), {
+    name: "test",
+    baseURL: "https://example.test/v1",
+    apiKeyEnv: "TEST_KEY",
+    model: "demo",
+    temperature: 0.3,
+    maxTokens: 64,
+  });
+  writeJson(path.join(root, "configs", "a.json"), { name: "a", provider: "test", model: "model-a" });
+  writeJson(path.join(root, "configs", "b.json"), { name: "b", provider: "test", model: "model-b" });
+  writeText(path.join(root, "prompts", "system", "default.md"), "你是测试助手。\n");
+  const env: Record<string, string | undefined> = {
+    TEST_KEY: "sk-test-abc",
+    JS_LLMLAB_PROVIDER: "test",
+    OPENAI_API_KEY: undefined,
+    OPENAI_BASE_URL: undefined,
+    OPENAI_MODEL: undefined,
+  };
+  return { root, env };
 }
