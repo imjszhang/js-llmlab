@@ -51,6 +51,7 @@ npm start -- <命令>
 npx tsx src/cli.ts status
 npx tsx src/cli.ts config ls
 npx tsx src/cli.ts config show ds-v4-flash-reason
+npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --message x --dry-run   # 不发请求，打印配置与请求体 JSON
 npx tsx src/cli.ts run --config ds-v4-flash --message '...'
 npx tsx src/cli.ts run --config ds-v4-pro-reason --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt
@@ -150,5 +151,6 @@ data/tmp/                      一次性输入
 - 关 thinking 的 flash 可能几乎不改稿；要比文风先开 reasoning
 - llmcore 不保证 `low < high < max` 的推理长度
 - `compare --suite x --model y` 不会把各路都换成 y
-- 缺密钥时先 `status` / `config show`，不要把 `.env` 内容贴出来
+- 缺密钥时先 `status` / `config show` / `--dry-run`，不要把 `.env` 内容贴出来
+- 想确认 `thinking` / `reasoning_effort` 是否真进了请求体，用 `--dry-run` 看 `request` 字段，别猜
 - 测网关用 CLI；回归用 `npm test`，两套不要混

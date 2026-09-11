@@ -25,9 +25,13 @@ function addSharedOptions(command: Command): Command {
     .option("--reasoning-effort <level>", "low、high 或 max");
 }
 
+type StringOptionKey = {
+  [K in keyof SharedCliOptions]-?: SharedCliOptions[K] extends string | undefined ? K : never;
+}[keyof SharedCliOptions];
+
 function toShared(options: Record<string, unknown>): SharedCliOptions {
   const shared: SharedCliOptions = {};
-  const assign = (key: keyof SharedCliOptions, value: unknown): void => {
+  const assign = (key: StringOptionKey, value: unknown): void => {
     if (typeof value === "string") {
       shared[key] = value;
     }
@@ -49,6 +53,9 @@ function toShared(options: Record<string, unknown>): SharedCliOptions {
   assign("thinking", options.thinking);
   assign("reasoningEffort", options.reasoningEffort);
   assign("from", options.from);
+  if (typeof options.dryRun === "boolean") {
+    shared.dryRun = options.dryRun;
+  }
   return shared;
 }
 
@@ -106,7 +113,8 @@ async function main(): Promise<void> {
       .command("run")
       .description("非交互跑一轮")
       .option("--message <text>", "用户输入")
-      .option("--input <file>", "从文件读取用户输入"),
+      .option("--input <file>", "从文件读取用户输入")
+      .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
   ).action(async (options: Record<string, unknown>) => {
     await runOnce(toShared(options));
   });
@@ -153,7 +161,8 @@ async function main(): Promise<void> {
       .option("--models <ids>", "逗号分隔的模型 id，可与 --configs/--suite 并用")
       .option("--message <text>", "用户输入")
       .option("--input <file>", "从文件读取用户输入")
-      .option("--from <node>", "从该节点继续"),
+      .option("--from <node>", "从该节点继续")
+      .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
   ).action(async (options: Record<string, unknown>) => {
     await runCompare(toShared(options));
   });

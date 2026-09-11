@@ -132,6 +132,18 @@ export type SharedCliOptions = {
   thinking?: string;
   reasoningEffort?: string;
   from?: string;
+  /** 只打印解析后的配置与请求体，不发请求、不落盘。 */
+  dryRun?: boolean;
+};
+
+/** `--dry-run` 的一路输出：配置快照、密钥状态、消息与将发送的请求体。 */
+export type DryRunEntry = {
+  ref: string;
+  config: ConfigSnapshot;
+  apiKeyEnv: string;
+  apiKeyPresent: boolean;
+  messages: ChatMessage[];
+  request: Record<string, unknown>;
 };
 
 export type ConfigRefSource = "file" | "model";

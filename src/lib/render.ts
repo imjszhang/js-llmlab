@@ -2,8 +2,14 @@ import type {
   BranchRecord,
   ComparisonSpec,
   ComparisonVariant,
+  DryRunEntry,
   SessionNode,
 } from "../types.ts";
+
+/** `--dry-run` 输出：纯 JSON，方便人和 agent 直接读。 */
+export function renderDryRun(entries: DryRunEntry[]): string {
+  return JSON.stringify({ dryRun: true, variants: entries }, null, 2);
+}
 
 function yamlQuote(value: string): string {
   return JSON.stringify(value);

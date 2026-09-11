@@ -35,12 +35,10 @@ jobs:
       - run: npm test
 
       # 离线冒烟：只解析配置、不发请求。key 是假的，任何真实网络调用都应失败。
-      # #2 落地后改为 compare --dry-run。
       - name: smoke (offline)
         env:
           JS_LLMLAB_PROVIDER: llmcore
           LLMCORE_API_KEY: ci-dummy-key
         run: |
           npx tsx src/cli.ts status
-          npx tsx src/cli.ts config ls
-          npx tsx src/cli.ts config show ds-v4-flash-reason
+          npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --message smoke --dry-run

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ChatMessage, ResolvedConfig, TokenUsage } from "../types.ts";
+import type { ChatMessage, ConfigSnapshot, ResolvedConfig, TokenUsage } from "../types.ts";
 
 export type CompletionResult = {
   text: string;
@@ -62,8 +62,12 @@ function mapUsage(usage: unknown): TokenUsage | null {
   };
 }
 
-function buildChatRequest(
-  config: ResolvedConfig,
+/**
+ * 组装 chat.completions 请求体。只依赖配置快照，不含密钥，
+ * 所以 `--dry-run` 可以直接打印它。
+ */
+export function buildChatRequest(
+  config: ConfigSnapshot,
   messages: ChatMessage[],
   stream: boolean,
 ): Record<string, unknown> {
