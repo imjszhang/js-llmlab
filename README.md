@@ -99,8 +99,11 @@ js-llmlab compare score <c_id> --reference data/tmp/gold.txt   # 对已有对比
 js-llmlab compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason   # 再让 LLM 裁判逐路打 0–10 分
 js-llmlab compare retry <c_id> [--only a,b]   # 只补跑失败的路（或指定的路），更新 variant 与 report.md
 js-llmlab compare --provider llmcore --models deepseek-chat,deepseek-v4-flash,deepseek-v4-pro --message text
+js-llmlab compare ls                # 按时间倒序列出对比：c_id、时间、路数、session、有无 scores、输入摘要
+js-llmlab compare show <c_id>       # 打印与 report.md 相同的汇总表和目录
 js-llmlab session ls
 js-llmlab session show <id>
+js-llmlab node show <session> <node> [--json]   # 打印一个节点的 turn md；--json 打原始节点 JSON
 js-llmlab branch create --session id --name alt [--from node]
 ```
 

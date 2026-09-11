@@ -11,6 +11,7 @@ import type {
 } from "../types.ts";
 import { formatCost } from "./cost.ts";
 import { stat, variantRuns } from "./runs.ts";
+import type { ComparisonSummary } from "./store.ts";
 
 /** `--dry-run` 输出：纯 JSON，方便人和 agent 直接读。 */
 export function renderDryRun(entries: DryRunEntry[]): string {
@@ -389,6 +390,23 @@ export function renderVariantRun(variant: ComparisonVariant, run: VariantRun, k:
   }
   lines.push("", "## Assistant", "", run.assistant || "_(empty)_", "");
   return lines.join("\n");
+}
+
+/** `compare ls` 的列表：id、时间、路数（× 次数）、session、输入摘要 40 字、有没有分数。 */
+export function renderComparisonList(entries: ComparisonSummary[]): string {
+  const header = "c_id           createdAt                 路数  session        scores  input";
+  const rows = entries.map((entry) => {
+    const routes = entry.repeat !== undefined ? `${String(entry.configs.length)}×${String(entry.repeat)}` : String(entry.configs.length);
+    return [
+      entry.id.padEnd(14),
+      entry.createdAt.padEnd(25),
+      routes.padStart(4),
+      (entry.sessionId ?? "-").padEnd(14),
+      (entry.hasScores ? "有" : "-").padEnd(6),
+      truncateTitle(entry.input, 40),
+    ].join("  ");
+  });
+  return [header, ...rows].join("\n");
 }
 
 export function truncateTitle(text: string, max = 40): string {
