@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `compare` 在按名字去重之后再按解析快照（provider、baseURL、model、thinking、effort、temperature、maxTokens）去重，名字不同但请求相同的路只跑一次并在终端提示；`spec.configs` 记录的是去重后的路（#14）。
+- `client.ts` 的类型绕过收窄到唯一的 `toSdkParams` 适配函数，流式与非流式响应都用 SDK 自带类型；新增 `tests/hygiene.test.ts` 守住「全仓库 ≤ 1 处 `as never`」（#14）。
+
 ## [0.4.0] - 2026-09-11
 
 M2 评估与成本：「像不像」有离线指标，「好不好」有 LLM 裁判，「值不值」有成本列。

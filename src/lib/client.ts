@@ -1,4 +1,9 @@
 import OpenAI from "openai";
+import type {
+  ChatCompletionCreateParams,
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+} from "openai/resources/chat/completions";
 import type { ChatMessage, ConfigSnapshot, ResolvedConfig, TokenUsage } from "../types.ts";
 
 export type CompletionResult = {
@@ -90,6 +95,20 @@ export function buildChatRequest(
   return params;
 }
 
+/**
+ * 全仓库唯一的类型绕过点。
+ *
+ * `buildChatRequest` 为了让 `--dry-run` 能原样打印，返回宽松的 Record；
+ * 而且请求体里带 SDK 类型没有的网关扩展字段（DeepSeek 的 `thinking`），
+ * 本来也不可能通过 `ChatCompletionCreateParams` 的结构检查。
+ * 这里按 stream 分流成 SDK 的两种参数类型，其余代码只跟带类型的响应打交道。
+ */
+function toSdkParams(request: Record<string, unknown>, stream: true): ChatCompletionCreateParamsStreaming;
+function toSdkParams(request: Record<string, unknown>, stream: false): ChatCompletionCreateParamsNonStreaming;
+function toSdkParams(request: Record<string, unknown>, _stream: boolean): ChatCompletionCreateParams {
+  return request as never;
+}
+
 export async function runCompletion(
   config: ResolvedConfig,
   messages: ChatMessage[],
@@ -100,9 +119,9 @@ export async function runCompletion(
   const stream = options.stream === true;
 
   if (stream) {
-    const response = (await client.chat.completions.create(
-      buildChatRequest(config, messages, true) as never,
-    )) as unknown as AsyncIterable<{ choices: Array<{ delta?: unknown }>; usage?: unknown }>;
+    const response = await client.chat.completions.create(
+      toSdkParams(buildChatRequest(config, messages, true), true),
+    );
 
     let text = "";
     let reasoning = "";
@@ -133,7 +152,7 @@ export async function runCompletion(
   }
 
   const response = await client.chat.completions.create(
-    buildChatRequest(config, messages, false) as never,
+    toSdkParams(buildChatRequest(config, messages, false), false),
   );
   const message = response.choices[0]?.message;
   const text = readStringField(message, ["content"]);

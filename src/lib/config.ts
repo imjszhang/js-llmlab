@@ -217,6 +217,50 @@ export function collectConfigRefs(
   ]);
 }
 
+/** 去重键：解析后真正决定请求的字段。名字不同但落到同一请求的路只该跑一次。 */
+export function snapshotKey(snapshot: ConfigSnapshot): string {
+  return JSON.stringify([
+    snapshot.provider,
+    snapshot.baseURL,
+    snapshot.model,
+    snapshot.thinking,
+    snapshot.reasoningEffort,
+    snapshot.temperature,
+    snapshot.maxTokens,
+  ]);
+}
+
+export type DedupedRefs = {
+  kept: string[];
+  dropped: Array<{ ref: string; sameAs: string }>;
+};
+
+/**
+ * 按解析快照去重（`collectConfigRefs` 只按名字去重）。
+ * 例如 `--configs ds-v4-flash --models deepseek-v4-flash` 解析后完全一样，只保留先出现的那个。
+ * 用 peek 而不是 resolve，所以 `--dry-run` 没 key 也能去重。
+ */
+export function dedupeConfigRefs(
+  root: string,
+  refs: string[],
+  overrides: CliConfigOverrides = {},
+): DedupedRefs {
+  const firstByKey = new Map<string, string>();
+  const kept: string[] = [];
+  const dropped: Array<{ ref: string; sameAs: string }> = [];
+  for (const ref of refs) {
+    const key = snapshotKey(peekConfigRef(root, ref, overrides).snapshot);
+    const first = firstByKey.get(key);
+    if (first === undefined) {
+      firstByKey.set(key, ref);
+      kept.push(ref);
+    } else {
+      dropped.push({ ref, sameAs: first });
+    }
+  }
+  return { kept, dropped };
+}
+
 export function safeVariantName(name: string): string {
   const safe = name.replace(/[\\/:*?"<>|]/gu, "_").replace(/\s+/gu, "_");
   return safe === "" ? "config" : safe;

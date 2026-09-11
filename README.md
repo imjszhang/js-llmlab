@@ -102,6 +102,8 @@ js-llmlab branch create --session id --name alt [--from node]
 
 `run` / `compare` 加 `--dry-run` 时输出一段 JSON：解析后的配置快照、密钥变量名与是否已设置、messages、将发送的请求体。不需要 key，不建会话，不写 `data/`。
 
+`compare` 的各路先按名字去重，再按解析后的快照去重：`--configs ds-v4-flash --models deepseek-v4-flash` 两个名字落到同一个请求，只跑一路，终端会提示被跳过的名字。只差 effort / temperature 等参数的路不会被合并。
+
 `chat` 斜杠命令：`/help` `/provider` `/system` `/user` `/config` `/branch` `/branches` `/tree` `/exit`。
 
 ## 提示词预设
