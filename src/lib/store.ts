@@ -16,16 +16,19 @@ import type {
 import { safeVariantName } from "./config.ts";
 import { createId } from "./ids.ts";
 import {
+  isRecord,
+  parseComparisonSpec,
+  parseSessionNode,
+  requireNullableString,
+  requireString,
+} from "./parse.ts";
+import {
   comparisonDir,
   getComparisonsDir,
   getSessionsDir,
   sessionDir,
 } from "./paths.ts";
 import { renderTurn, renderVariantMarkdown } from "./render.ts";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function writeJson(filePath: string, value: unknown): void {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -36,19 +39,11 @@ function readJson(filePath: string): unknown {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`字段 ${field} 必须是字符串`);
-  }
-  return value;
-}
-
-function requireNullableString(value: unknown, field: string): string | null {
-  if (value === null) {
-    return null;
-  }
-  return requireString(value, field);
-}
+export type StoredComparison = {
+  spec: ComparisonSpec;
+  variants: ComparisonVariant[];
+  dir: string;
+};
 
 export class LabStore {
   readonly root: string;
@@ -135,12 +130,16 @@ export class LabStore {
     this.updateSession(sessionId, {});
   }
 
+  nodeExists(sessionId: string, nodeId: string): boolean {
+    return existsSync(path.join(sessionDir(this.root, sessionId), "nodes", `${nodeId}.json`));
+  }
+
   getNode(sessionId: string, nodeId: string): SessionNode {
     const filePath = path.join(sessionDir(this.root, sessionId), "nodes", `${nodeId}.json`);
     if (!existsSync(filePath)) {
       throw new Error(`找不到节点：${sessionId}/${nodeId}`);
     }
-    return this.parseNode(readJson(filePath));
+    return parseSessionNode(readJson(filePath));
   }
 
   listNodes(sessionId: string): SessionNode[] {
@@ -150,7 +149,7 @@ export class LabStore {
     }
     return readdirSync(dir)
       .filter((file) => file.endsWith(".json"))
-      .map((file) => this.parseNode(readJson(path.join(dir, file))))
+      .map((file) => parseSessionNode(readJson(path.join(dir, file))))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
@@ -192,6 +191,7 @@ export class LabStore {
       const variantDir = path.join(dir, "variants", safeVariantName(variant.configName));
       mkdirSync(variantDir, { recursive: true });
       writeJson(path.join(variantDir, "meta.json"), {
+        configName: variant.configName,
         config: variant.config,
         usage: variant.usage,
         latencyMs: variant.latencyMs,
@@ -202,6 +202,50 @@ export class LabStore {
     }
     writeFileSync(path.join(dir, "report.md"), report, "utf8");
     return dir;
+  }
+
+  comparisonExists(comparisonId: string): boolean {
+    return existsSync(path.join(comparisonDir(this.root, comparisonId), "spec.json"));
+  }
+
+  /**
+   * 读回一次对比：spec + 各路结果。成稿与思维链从会话节点取，
+   * 所以节点被删时会抛错，而不是默默给空文本。
+   */
+  readComparison(comparisonId: string): StoredComparison {
+    const dir = comparisonDir(this.root, comparisonId);
+    const specPath = path.join(dir, "spec.json");
+    if (!existsSync(specPath)) {
+      throw new Error(`找不到对比：${comparisonId}（期望 ${specPath}）`);
+    }
+    const spec = parseComparisonSpec(readJson(specPath));
+    const variants = spec.configs.map((ref) => {
+      const metaPath = path.join(dir, "variants", safeVariantName(ref), "meta.json");
+      if (!existsSync(metaPath)) {
+        throw new Error(`对比 ${comparisonId} 缺少 ${ref} 的 meta.json`);
+      }
+      const meta = readJson(metaPath);
+      if (!isRecord(meta)) {
+        throw new Error(`对比 ${comparisonId} 的 ${ref}/meta.json 格式无效`);
+      }
+      const nodeId = requireNullableString(meta.nodeId, "nodeId");
+      if (spec.sessionId === null || nodeId === null) {
+        throw new Error(`对比 ${comparisonId} 的 ${ref} 没有关联节点，无法读回成稿`);
+      }
+      const node = this.getNode(spec.sessionId, nodeId);
+      const variant: ComparisonVariant = {
+        configName: ref,
+        config: node.config,
+        assistant: node.messages.assistant,
+        reasoning: node.messages.reasoning,
+        usage: node.usage,
+        latencyMs: node.latencyMs,
+        error: node.error,
+        nodeId,
+      };
+      return variant;
+    });
+    return { spec, variants, dir };
   }
 
   private parseSessionMeta(raw: unknown): SessionMeta {
@@ -226,72 +270,6 @@ export class LabStore {
       name: requireString(raw.name, "name"),
       head: requireNullableString(raw.head, "head"),
       createdFrom: requireNullableString(raw.createdFrom, "createdFrom"),
-    };
-  }
-
-  private parseNode(raw: unknown): SessionNode {
-    if (!isRecord(raw) || !isRecord(raw.config) || !isRecord(raw.messages)) {
-      throw new Error("node JSON 格式无效");
-    }
-    const usageRaw = raw.usage;
-    let usage: SessionNode["usage"] = null;
-    if (usageRaw !== null && usageRaw !== undefined) {
-      if (!isRecord(usageRaw)) {
-        throw new Error("usage 格式无效");
-      }
-      usage = {
-        promptTokens: Number(usageRaw.promptTokens),
-        completionTokens: Number(usageRaw.completionTokens),
-        totalTokens: Number(usageRaw.totalTokens),
-        reasoningTokens:
-          usageRaw.reasoningTokens === undefined || usageRaw.reasoningTokens === null
-            ? null
-            : Number(usageRaw.reasoningTokens),
-      };
-    }
-    return {
-      id: requireString(raw.id, "id"),
-      parentId: requireNullableString(raw.parentId, "parentId"),
-      createdAt: requireString(raw.createdAt, "createdAt"),
-      config: {
-        name: requireString(raw.config.name, "config.name"),
-        provider:
-          raw.config.provider === undefined || raw.config.provider === null
-            ? null
-            : requireString(raw.config.provider, "config.provider"),
-        baseURL: requireString(raw.config.baseURL, "config.baseURL"),
-        model: requireString(raw.config.model, "config.model"),
-        temperature: Number(raw.config.temperature),
-        maxTokens: Number(raw.config.maxTokens),
-        thinking:
-          raw.config.thinking === undefined || raw.config.thinking === null
-            ? null
-            : raw.config.thinking === "enabled" || raw.config.thinking === "disabled"
-              ? raw.config.thinking
-              : null,
-        reasoningEffort:
-          raw.config.reasoningEffort === undefined || raw.config.reasoningEffort === null
-            ? null
-            : raw.config.reasoningEffort === "low" ||
-                raw.config.reasoningEffort === "high" ||
-                raw.config.reasoningEffort === "max"
-              ? raw.config.reasoningEffort
-              : null,
-      },
-      systemPreset: requireNullableString(raw.systemPreset, "systemPreset"),
-      userPreset: requireNullableString(raw.userPreset, "userPreset"),
-      messages: {
-        system: requireString(raw.messages.system, "messages.system"),
-        user: requireString(raw.messages.user, "messages.user"),
-        assistant: requireString(raw.messages.assistant, "messages.assistant"),
-        reasoning:
-          raw.messages.reasoning === undefined
-            ? null
-            : requireNullableString(raw.messages.reasoning, "messages.reasoning"),
-      },
-      usage,
-      latencyMs: Number(raw.latencyMs),
-      error: requireNullableString(raw.error, "error"),
     };
   }
 }

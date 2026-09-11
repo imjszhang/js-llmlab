@@ -11,7 +11,9 @@
     "start": "tsx src/cli.ts",
     "js-llmlab": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "test:update-golden": "UPDATE_GOLDEN=1 tsx --test tests/*.test.ts",
+    "fixture:export": "tsx scripts/export-fixture.ts"
   },
   "engines": {
     "node": ">=20"

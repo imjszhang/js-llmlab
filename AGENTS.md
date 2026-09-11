@@ -69,6 +69,12 @@ npm run typecheck
 
 单测用 `node:test` + 临时目录（`tests/helpers.ts` 的 `makeLabRoot` / `makeCommandLab`）。测 `run` / `compare` 编排时，用 `tests/fake-completer.ts` 的 `createFakeCompleter` 通过第二个参数 `deps` 注入，不要碰 `runCompletion`。**禁止**在单测里打真实网关 / llmcore。
 
+fixture 与黄金文件：
+
+- `tests/fixtures/<name>/comparison.json` 是脱敏过的真实对比结果（`{ spec, variants }`），用 `tests/fixtures.ts` 的 `loadComparisonFixture` 读。现成的：`polish-8way`（DS V4 flash / pro 八路润色）。
+- 要新 fixture：先在本地跑真实 compare，再 `npm run fixture:export -- <c_id> <name>`。脚本会拒绝含 `sk-` / `Bearer` / `.env` 值的内容。
+- 渲染测试用 `tests/golden.ts` 的 `assertMatchesGolden(name, text)` 与 `tests/golden/<name>` 逐字节比对。改了渲染格式且确认是预期变化：`npm run test:update-golden`，然后 review diff，在 PR 里说明。不要手改黄金文件。
+
 ## 配置怎么叠
 
 后者覆盖前者：
