@@ -95,7 +95,7 @@ fixture 与黄金文件：
 
 - `--model` **不会**冲掉每一路的模型
 - `--thinking` / `--reasoning-effort` **会**作用到所有路
-- suite / `--configs` / `--models` 可并用，去重后至少两路
+- suite / `--configs` / `--models` 可并用，按名字去重后至少两路；再按解析快照（provider、baseURL、model、thinking、effort、temperature、maxTokens）去重，名字不同但请求相同的路只跑一次并在终端提示（`--configs ds-v4-flash --models deepseek-v4-flash` 只跑一路）
 - 各路并行，缺省并发 3；`--concurrency <n>` 必须是 ≥ 1 的整数。报表顺序 = 输入顺序，与谁先完成无关。跑 8 路想最快就 `--concurrency 8`
 - 默认 system 预设是 `default`（`prompts/system/default.md`：准确简洁）。测文风时先想清楚要不要换 system
 
@@ -168,6 +168,11 @@ compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行�
 - 配置解析、落盘、渲染的逻辑放 `src/lib/`，命令层只做编排
 - 保持 CLI 为唯一界面；不要引入新的运行时依赖，除非用户要
 - 用户规则若要求写文档先取日期：在 macOS 上用 `date`，不要猜
+
+技术债与红线：
+
+- 类型绕过（`as never` / `as unknown as`）全仓库只允许一处：`src/lib/client.ts` 的 `toSdkParams`，原因写在它的 JSDoc 里（请求体带 SDK 类型没有的 `thinking` 字段）。`tests/hygiene.test.ts` 会数这个，别在别处再加
+- SDK 响应用 SDK 自己的类型（`ChatCompletion` / `ChatCompletionChunk`）；网关扩展字段（`reasoning_content` 等）走 `readStringField` 之类的宽松读取，不要再整个 `as` 掉
 
 ## 常见坑
 

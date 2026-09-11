@@ -9,6 +9,7 @@ import { buildChatRequest } from "../lib/client.ts";
 import {
   collectConfigRefs,
   compareOverridesFromCli,
+  dedupeConfigRefs,
   loadEnv,
   peekConfigRef,
   resolveConfigRef,
@@ -32,11 +33,17 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   loadEnv(root);
   const store = new LabStore(root);
 
-  const refs = collectConfigRefs(options, root);
-  if (refs.length < 2) {
+  const named = collectConfigRefs(options, root);
+  if (named.length < 2) {
     throw new Error(
       "compare 需要至少两个配置或模型，例如 --configs deepseek,gpt-4o 或 --models deepseek-chat,gpt-4o",
     );
+  }
+  const overrides = compareOverridesFromCli(options);
+  // 名字不同、解析后相同的路只跑一次（例如 --configs ds-v4-flash --models deepseek-v4-flash）。
+  const { kept: refs, dropped } = dedupeConfigRefs(root, named, overrides);
+  for (const { ref, sameAs } of dropped) {
+    log(chalk.yellow(`去重：${ref} 解析后与 ${sameAs} 相同，只跑一路`));
   }
 
   const systemName = options.system ?? "default";
@@ -49,7 +56,6 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
     mode: "run",
   });
   const systemText = resolveSystemText(root, systemName);
-  const overrides = compareOverridesFromCli(options);
   const concurrency = parseConcurrency(options.concurrency);
 
   if (options.dryRun === true) {
