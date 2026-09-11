@@ -39,9 +39,11 @@ npx tsx src/cli.ts models --provider llmcore
 后者覆盖前者：
 
 1. `providers/<name>.json`：网关的 `baseURL`、`apiKeyEnv`、默认模型
-2. `configs/<name>.json`：引用 `provider`，再覆盖 `model` / `temperature` / `maxTokens`
+2. `configs/<name>.json`：引用 `provider`，再覆盖 `model` / `temperature` / `maxTokens` / `timeoutMs` / `maxRetries`
 3. 没有配置文件时，名称当作模型 id，走当前或 `--provider` 指定的网关
-4. CLI：`--provider`、`--temperature`、`--max-tokens`（`compare` 不会用 `--model` 冲掉每一路）
+4. CLI：`--provider`、`--temperature`、`--max-tokens`、`--timeout-ms`、`--max-retries`（`compare` 不会用 `--model` 冲掉每一路）
+
+`timeoutMs`（缺省 600000）交给 SDK 做单次请求超时；`maxRetries`（缺省 2）是我们这一层的指数退避重试（1s、2s、4s…），SDK 自身的重试已关掉，不会双重重试。流式一旦开始输出就不再重试。两项都进节点快照，`config show` 会打出来。
 
 当前主力是 **llmcore**（`https://proxy.llm-core.cn/v1`）。另外预置了 `openai`、`deepseek` 官方入口，填对应密钥即可用。
 
@@ -94,6 +96,7 @@ js-llmlab compare --suite deepseek --message text
 js-llmlab compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 各路并行，缺省并发 3
 js-llmlab compare score <c_id> --reference data/tmp/gold.txt   # 对已有对比算相似度 / 改动率，不发请求
 js-llmlab compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason   # 再让 LLM 裁判逐路打 0–10 分
+js-llmlab compare retry <c_id> [--only a,b]   # 只补跑失败的路（或指定的路），更新 variant 与 report.md
 js-llmlab compare --provider llmcore --models deepseek-chat,deepseek-v4-flash,deepseek-v4-pro --message text
 js-llmlab session ls
 js-llmlab session show <id>

@@ -202,27 +202,33 @@ export class LabStore {
     mkdirSync(path.join(dir, "variants"), { recursive: true });
     writeJson(path.join(dir, "spec.json"), spec);
     for (const variant of variants) {
-      const variantDir = path.join(dir, "variants", safeVariantName(variant.configName));
-      mkdirSync(variantDir, { recursive: true });
-      writeJson(path.join(variantDir, "meta.json"), {
-        configName: variant.configName,
-        config: variant.config,
-        usage: variant.usage,
-        latencyMs: variant.latencyMs,
-        error: variant.error,
-        nodeId: variant.nodeId,
-        cost: variant.cost,
-      });
-      writeFileSync(path.join(variantDir, "output.md"), renderVariantMarkdown(variant), "utf8");
-      const reasoningPath = path.join(variantDir, "reasoning.md");
-      if (variant.reasoning !== null && variant.reasoning !== "") {
-        writeFileSync(reasoningPath, renderVariantReasoning(variant), "utf8");
-      } else if (existsSync(reasoningPath)) {
-        rmSync(reasoningPath);
-      }
+      this.writeVariant(spec.id, variant);
     }
     writeFileSync(path.join(dir, "report.md"), report, "utf8");
     return dir;
+  }
+
+  /** 只写一路的 `variants/<name>/`（meta.json、output.md、reasoning.md）；补跑单路时用。 */
+  writeVariant(comparisonId: string, variant: ComparisonVariant): string {
+    const variantDir = path.join(comparisonDir(this.root, comparisonId), "variants", safeVariantName(variant.configName));
+    mkdirSync(variantDir, { recursive: true });
+    writeJson(path.join(variantDir, "meta.json"), {
+      configName: variant.configName,
+      config: variant.config,
+      usage: variant.usage,
+      latencyMs: variant.latencyMs,
+      error: variant.error,
+      nodeId: variant.nodeId,
+      cost: variant.cost,
+    });
+    writeFileSync(path.join(variantDir, "output.md"), renderVariantMarkdown(variant), "utf8");
+    const reasoningPath = path.join(variantDir, "reasoning.md");
+    if (variant.reasoning !== null && variant.reasoning !== "") {
+      writeFileSync(reasoningPath, renderVariantReasoning(variant), "utf8");
+    } else if (existsSync(reasoningPath)) {
+      rmSync(reasoningPath);
+    }
+    return variantDir;
   }
 
   comparisonExists(comparisonId: string): boolean {
@@ -240,6 +246,16 @@ export class LabStore {
     const filePath = path.join(comparisonDir(this.root, comparisonId), "scores.json");
     writeJson(filePath, scores);
     return filePath;
+  }
+
+  /** 删掉 scores.json（成稿变了旧分数就不作数）；返回是否真的删了。 */
+  deleteScores(comparisonId: string): boolean {
+    const filePath = path.join(comparisonDir(this.root, comparisonId), "scores.json");
+    if (!existsSync(filePath)) {
+      return false;
+    }
+    rmSync(filePath);
+    return true;
   }
 
   readScores(comparisonId: string): ComparisonScores | null {

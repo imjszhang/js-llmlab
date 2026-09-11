@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 配置字段 `timeoutMs`（缺省 600000，交给 SDK）与 `maxRetries`（缺省 2，我们这一层指数退避重试，SDK 自身重试关掉）；CLI `--timeout-ms` / `--max-retries`；两项进节点快照，老节点缺字段读成默认值；`config show` 打印。流式一旦开始输出不再重试（#10）。
+- `compare retry <c_id> [--only a,b] [--concurrency n] [--timeout-ms n] [--max-retries n]`：只补跑失败路（或 `--only` 指定的路），复用原输入 / system / 配置快照，更新对应 `variants/<name>/` 与 `report.md`，删除已失效的 `scores.json` 并提示（#10）。
+
 ### Changed
 
 - `compare` 在按名字去重之后再按解析快照（provider、baseURL、model、thinking、effort、temperature、maxTokens）去重，名字不同但请求相同的路只跑一次并在终端提示；`spec.configs` 记录的是去重后的路（#14）。

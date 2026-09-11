@@ -21,6 +21,8 @@ const DEFAULT_TEMPERATURE = 1;
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_API_KEY_ENV = "OPENAI_API_KEY";
 const DEFAULT_PROVIDER = "llmcore";
+export const DEFAULT_TIMEOUT_MS = 600_000;
+export const DEFAULT_MAX_RETRIES = 2;
 
 export function loadEnv(root: string): void {
   loadDotenv({ path: path.join(root, ".env"), quiet: true });
@@ -60,6 +62,8 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   const apiKeyEnv = optionalString(raw.apiKeyEnv);
   const thinking = parseThinkingMode(raw.thinking);
   const reasoningEffort = parseReasoningEffort(raw.reasoningEffort);
+  const timeoutMs = parseTimeoutMs(raw.timeoutMs);
+  const maxRetries = parseMaxRetries(raw.maxRetries);
   const pricing = parsePricing(raw.pricing);
   if (name !== undefined) parsed.name = name;
   if (provider !== undefined) parsed.provider = provider;
@@ -70,8 +74,34 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   if (apiKeyEnv !== undefined) parsed.apiKeyEnv = apiKeyEnv;
   if (thinking !== undefined) parsed.thinking = thinking;
   if (reasoningEffort !== undefined) parsed.reasoningEffort = reasoningEffort;
+  if (timeoutMs !== undefined) parsed.timeoutMs = timeoutMs;
+  if (maxRetries !== undefined) parsed.maxRetries = maxRetries;
   if (pricing !== undefined) parsed.pricing = pricing;
   return parsed;
+}
+
+/** `timeoutMs`：> 0 的整数（毫秒）。配置文件里是数字，CLI 传字符串。 */
+export function parseTimeoutMs(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isInteger(n) || n <= 0) {
+    throw new Error(`timeoutMs 必须是 > 0 的整数毫秒，收到 ${String(value)}`);
+  }
+  return n;
+}
+
+/** `maxRetries`：≥ 0 的整数。 */
+export function parseMaxRetries(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+    throw new Error(`maxRetries 必须是 ≥ 0 的整数，收到 ${String(value)}`);
+  }
+  return n;
 }
 
 /** `pricing: { inputPerMillion, outputPerMillion, currency? }`，currency 缺省 CNY。 */
@@ -293,6 +323,8 @@ function mergeConfig(base: NamedConfigFile, overlay: NamedConfigFile): NamedConf
   if (overlay.apiKeyEnv !== undefined) merged.apiKeyEnv = overlay.apiKeyEnv;
   if (overlay.thinking !== undefined) merged.thinking = overlay.thinking;
   if (overlay.reasoningEffort !== undefined) merged.reasoningEffort = overlay.reasoningEffort;
+  if (overlay.timeoutMs !== undefined) merged.timeoutMs = overlay.timeoutMs;
+  if (overlay.maxRetries !== undefined) merged.maxRetries = overlay.maxRetries;
   if (overlay.pricing !== undefined) merged.pricing = overlay.pricing;
   return merged;
 }
@@ -328,6 +360,8 @@ function finalizeSnapshot(merged: NamedConfigFile, fallbackName: string): Config
     maxTokens: merged.maxTokens ?? DEFAULT_MAX_TOKENS,
     thinking: merged.thinking ?? null,
     reasoningEffort: merged.reasoningEffort ?? null,
+    timeoutMs: merged.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    maxRetries: merged.maxRetries ?? DEFAULT_MAX_RETRIES,
   };
   if (merged.pricing !== undefined) {
     snapshot.pricing = merged.pricing;
@@ -358,6 +392,8 @@ export function peekConfig(
   if (overrides.maxTokens !== undefined) overlay.maxTokens = overrides.maxTokens;
   if (overrides.thinking !== undefined) overlay.thinking = overrides.thinking;
   if (overrides.reasoningEffort !== undefined) overlay.reasoningEffort = overrides.reasoningEffort;
+  if (overrides.timeoutMs !== undefined) overlay.timeoutMs = overrides.timeoutMs;
+  if (overrides.maxRetries !== undefined) overlay.maxRetries = overrides.maxRetries;
   merged = mergeConfig(merged, overlay);
   const snapshot = finalizeSnapshot(merged, name ?? providerName ?? "env");
   const apiKeyEnv = merged.apiKeyEnv ?? DEFAULT_API_KEY_ENV;
@@ -437,6 +473,8 @@ export function compareOverridesFromCli(options: SharedCliOptions): CliConfigOve
   if (overrides.maxTokens !== undefined) result.maxTokens = overrides.maxTokens;
   if (overrides.thinking !== undefined) result.thinking = overrides.thinking;
   if (overrides.reasoningEffort !== undefined) result.reasoningEffort = overrides.reasoningEffort;
+  if (overrides.timeoutMs !== undefined) result.timeoutMs = overrides.timeoutMs;
+  if (overrides.maxRetries !== undefined) result.maxRetries = overrides.maxRetries;
   return result;
 }
 
@@ -450,6 +488,8 @@ export function toSnapshot(config: ResolvedConfig): ConfigSnapshot {
     maxTokens: config.maxTokens,
     thinking: config.thinking,
     reasoningEffort: config.reasoningEffort,
+    timeoutMs: config.timeoutMs,
+    maxRetries: config.maxRetries,
   };
   if (config.pricing !== undefined) {
     snapshot.pricing = config.pricing;
@@ -480,6 +520,14 @@ export function overridesFromCli(options: SharedCliOptions): CliConfigOverrides 
   const reasoningEffort = parseReasoningEffort(options.reasoningEffort);
   if (reasoningEffort !== undefined) {
     overrides.reasoningEffort = reasoningEffort;
+  }
+  const timeoutMs = parseTimeoutMs(options.timeoutMs);
+  if (timeoutMs !== undefined) {
+    overrides.timeoutMs = timeoutMs;
+  }
+  const maxRetries = parseMaxRetries(options.maxRetries);
+  if (maxRetries !== undefined) {
+    overrides.maxRetries = maxRetries;
   }
   return overrides;
 }

@@ -23,6 +23,8 @@ const node: SessionNode = {
     maxTokens: 4096,
     thinking: null,
     reasoningEffort: null,
+    timeoutMs: 600000,
+    maxRetries: 2,
   },
   systemPreset: "default",
   userPreset: "hello",
