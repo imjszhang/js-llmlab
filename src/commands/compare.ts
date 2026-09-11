@@ -1,24 +1,30 @@
 import chalk from "chalk";
-import type { ComparisonSpec, ComparisonVariant, SharedCliOptions } from "../types.ts";
+import type {
+  ComparisonSpec,
+  ComparisonVariant,
+  DryRunEntry,
+  SharedCliOptions,
+} from "../types.ts";
+import { buildChatRequest } from "../lib/client.ts";
 import {
   collectConfigRefs,
   compareOverridesFromCli,
   loadEnv,
+  peekConfigRef,
   resolveConfigRef,
   safeVariantName,
 } from "../lib/config.ts";
 import { createId } from "../lib/ids.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
-import { renderComparisonReport, truncateTitle } from "../lib/render.ts";
+import { renderComparisonReport, renderDryRun, truncateTitle } from "../lib/render.ts";
 import { LabStore } from "../lib/store.ts";
-import { appendTurn, forkBranch } from "../lib/tree.ts";
+import { ancestorChain, appendTurn, buildApiMessages, forkBranch } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
 
 export async function runCompare(options: SharedCliOptions, deps?: CommandDeps): Promise<void> {
   const { root, complete, log } = resolveDeps(deps);
   loadEnv(root);
   const store = new LabStore(root);
-  store.ensureLayout();
 
   const refs = collectConfigRefs(options, root);
   if (refs.length < 2) {
@@ -39,6 +45,31 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   const systemText = resolveSystemText(root, systemName);
   const overrides = compareOverridesFromCli(options);
 
+  if (options.dryRun === true) {
+    // 不要 key、不建会话、不写 data/。带 --session/--from 时只读祖先链。
+    const sessionId = options.session;
+    const fromNodeId = options.from ?? null;
+    const ancestors =
+      sessionId !== undefined && fromNodeId !== null && store.sessionExists(sessionId)
+        ? ancestorChain(store, sessionId, fromNodeId)
+        : [];
+    const messages = buildApiMessages(systemText, ancestors, userText);
+    const entries: DryRunEntry[] = refs.map((ref) => {
+      const peeked = peekConfigRef(root, ref, overrides);
+      return {
+        ref,
+        config: peeked.snapshot,
+        apiKeyEnv: peeked.apiKeyEnv,
+        apiKeyPresent: peeked.apiKeyPresent,
+        messages,
+        request: buildChatRequest(peeked.snapshot, messages, false),
+      };
+    });
+    log(renderDryRun(entries));
+    return;
+  }
+
+  store.ensureLayout();
   let sessionId = options.session;
   if (sessionId === undefined) {
     const session = store.createSession({

@@ -75,12 +75,15 @@ js-llmlab config ls
 js-llmlab config show ds-chat
 js-llmlab chat [--provider llmcore] [--config ds-chat]
 js-llmlab run --config ds-chat --message text
+js-llmlab run --config ds-v4-flash-reason --message text --dry-run   # 只打印配置与请求体，不发请求
 js-llmlab compare --suite deepseek --message text
 js-llmlab compare --provider llmcore --models deepseek-chat,deepseek-v4-flash,deepseek-v4-pro --message text
 js-llmlab session ls
 js-llmlab session show <id>
 js-llmlab branch create --session id --name alt [--from node]
 ```
+
+`run` / `compare` 加 `--dry-run` 时输出一段 JSON：解析后的配置快照、密钥变量名与是否已设置、messages、将发送的请求体。不需要 key，不建会话，不写 `data/`。
 
 `chat` 斜杠命令：`/help` `/provider` `/system` `/user` `/config` `/branch` `/branches` `/tree` `/exit`。
 

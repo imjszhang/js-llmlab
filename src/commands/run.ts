@@ -1,20 +1,20 @@
 import chalk from "chalk";
-import type { SharedCliOptions } from "../types.ts";
-import { loadEnv, overridesFromCli, resolveConfigRef } from "../lib/config.ts";
+import type { DryRunEntry, SharedCliOptions } from "../types.ts";
+import { buildChatRequest } from "../lib/client.ts";
+import { loadEnv, overridesFromCli, peekConfigRef, resolveConfigRef } from "../lib/config.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
-import { truncateTitle } from "../lib/render.ts";
+import { renderDryRun, truncateTitle } from "../lib/render.ts";
 import { LabStore } from "../lib/store.ts";
-import { appendTurn } from "../lib/tree.ts";
+import { ancestorChain, appendTurn, buildApiMessages } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
 
 export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Promise<void> {
   const { root, complete, log, error } = resolveDeps(deps);
   loadEnv(root);
   const store = new LabStore(root);
-  store.ensureLayout();
 
   const configName = options.config ?? "ds-chat";
-  const config = resolveConfigRef(root, configName, overridesFromCli(options));
+  const overrides = overridesFromCli(options);
   const systemName = options.system ?? "default";
   const userName = options.user ?? null;
   const input = readMessageInput(options.message, options.input);
@@ -25,6 +25,32 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
     mode: "run",
   });
   const systemText = resolveSystemText(root, systemName);
+  const branchName = options.branch ?? "main";
+
+  if (options.dryRun === true) {
+    // 不要 key、不建会话、不写 data/。已有会话时只读祖先链。
+    const peeked = peekConfigRef(root, configName, overrides);
+    const sessionId = options.session;
+    const parentId =
+      sessionId !== undefined && store.sessionExists(sessionId) && store.branchExists(sessionId, branchName)
+        ? store.getBranch(sessionId, branchName).head
+        : null;
+    const ancestors = sessionId !== undefined && parentId !== null ? ancestorChain(store, sessionId, parentId) : [];
+    const messages = buildApiMessages(systemText, ancestors, userText);
+    const entry: DryRunEntry = {
+      ref: configName,
+      config: peeked.snapshot,
+      apiKeyEnv: peeked.apiKeyEnv,
+      apiKeyPresent: peeked.apiKeyPresent,
+      messages,
+      request: buildChatRequest(peeked.snapshot, messages, false),
+    };
+    log(renderDryRun([entry]));
+    return;
+  }
+
+  store.ensureLayout();
+  const config = resolveConfigRef(root, configName, overrides);
 
   let sessionId = options.session;
   if (sessionId === undefined) {
@@ -39,7 +65,6 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
     throw new Error(`找不到会话：${sessionId}`);
   }
 
-  const branchName = options.branch ?? "main";
   if (!store.branchExists(sessionId, branchName)) {
     throw new Error(`找不到分支：${branchName}`);
   }
