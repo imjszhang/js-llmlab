@@ -101,11 +101,15 @@ providers/<name>.json
 configs/<name>.json
 suites/<name>.json
 data/sessions/<session-id>/...
-data/comparisons/<cmp-id>/report.md
+data/comparisons/<cmp-id>/report.md                    # 汇总表 + 输入 + 各路成稿
+data/comparisons/<cmp-id>/variants/<配置>/output.md     # 该路成稿
+data/comparisons/<cmp-id>/variants/<配置>/reasoning.md  # 该路思维链（没有就不生成）
 data/tmp/                  # 一次性输入草稿，不进 git
 ```
 
 每个会话是一棵树。发请求时用当前 system + 祖先链上的 user/assistant。请求失败也会落盘。
+
+`report.md` 开头是一张汇总表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误），`compare` 结束时终端也打这张表。
 
 ## 开发
 

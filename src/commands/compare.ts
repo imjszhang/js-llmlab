@@ -16,7 +16,12 @@ import {
 } from "../lib/config.ts";
 import { createId } from "../lib/ids.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
-import { renderComparisonReport, renderDryRun, truncateTitle } from "../lib/render.ts";
+import {
+  renderComparisonReport,
+  renderDryRun,
+  renderSummaryTable,
+  truncateTitle,
+} from "../lib/render.ts";
 import { LabStore } from "../lib/store.ts";
 import { ancestorChain, appendTurn, buildApiMessages, forkBranch } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
@@ -141,6 +146,8 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
 
   const report = renderComparisonReport(spec, variants);
   const dir = store.writeComparison(spec, variants, report);
-  log(report);
-  log(chalk.dim(`已写入 ${dir}`));
+  log("");
+  log(renderSummaryTable(variants));
+  log("");
+  log(chalk.dim(`已写入 ${dir}（report.md 含各路成稿，思维链在 variants/<配置>/reasoning.md）`));
 }

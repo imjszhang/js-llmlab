@@ -42,11 +42,18 @@ test("compare 注入假 completer：两路各一个节点、一个分支，repor
 
   const dirs = comparisonDirs(root);
   assert.equal(dirs.length, 1);
-  const report = readFileSync(path.join(root, "data", "comparisons", dirs[0] ?? "", "report.md"), "utf8");
+  const cmpDir = path.join(root, "data", "comparisons", dirs[0] ?? "");
+  const report = readFileSync(path.join(cmpDir, "report.md"), "utf8");
   assert.match(report, /## a/);
   assert.match(report, /## b/);
   assert.match(report, /答案 A/);
   assert.match(report, /答案 B/);
+  assert.doesNotMatch(report, /### Reasoning/);
+  // 有思维链的路才有 reasoning.md
+  assert.equal(existsSync(path.join(cmpDir, "variants", "a", "reasoning.md")), true);
+  assert.equal(existsSync(path.join(cmpDir, "variants", "b", "reasoning.md")), false);
+  assert.match(readFileSync(path.join(cmpDir, "variants", "a", "reasoning.md"), "utf8"), /想了想/);
+  assert.doesNotMatch(readFileSync(path.join(cmpDir, "variants", "a", "output.md"), "utf8"), /想了想/);
 
   assert.equal(fake.calls.length, 2);
   assert.equal(fake.calls[0]?.messages.at(-1)?.content, "同一道题");

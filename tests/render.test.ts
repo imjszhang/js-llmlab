@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderComparisonReport, renderTurn } from "../src/lib/render.ts";
+import {
+  answerTokens,
+  renderComparisonReport,
+  renderSummaryTable,
+  renderTurn,
+  renderVariantMarkdown,
+  renderVariantReasoning,
+} from "../src/lib/render.ts";
 import type { ComparisonSpec, ComparisonVariant, SessionNode } from "../src/types.ts";
 
 const node: SessionNode = {
@@ -72,10 +79,73 @@ test("对比报告并排两套配置", () => {
     },
   ];
   const report = renderComparisonReport(spec, variants);
+  assert.match(report, /## 汇总/);
   assert.match(report, /## default/);
   assert.match(report, /## deepseek/);
   assert.match(report, /答案 A/);
   assert.match(report, /答案 B/);
   assert.match(report, /同一道题/);
   assert.doesNotMatch(report, /apiKey|sk-/u);
+  // 汇总在 Input 之前，成稿在 Input 之后
+  assert.ok(report.indexOf("## 汇总") < report.indexOf("## Input"));
+  assert.ok(report.indexOf("## Input") < report.indexOf("## default"));
+});
+
+test("汇总表：行序 = 输入顺序，耗时 1 位小数，缺失为 -，错误截断 60 字", () => {
+  const longError = "x".repeat(80);
+  const variants: ComparisonVariant[] = [
+    {
+      configName: "slow|pipe",
+      config: { ...node.config, thinking: "enabled", reasoningEffort: "max" },
+      assistant: "A",
+      reasoning: "想",
+      usage: { promptTokens: 100, completionTokens: 350, totalTokens: 450, reasoningTokens: 300 },
+      latencyMs: 12345,
+      error: null,
+      nodeId: "n_a",
+    },
+    {
+      configName: "broken",
+      config: node.config,
+      assistant: "",
+      reasoning: null,
+      usage: null,
+      latencyMs: 0,
+      error: longError,
+      nodeId: "n_b",
+    },
+  ];
+  const table = renderSummaryTable(variants);
+  const rows = table.split("\n");
+  assert.equal(rows.length, 4);
+  assert.equal(rows[0], "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |");
+  assert.equal(rows[2], "| slow\\|pipe | deepseek-chat | enabled | max | 12.3 | 300 | 50 | 450 | - |");
+  assert.equal(rows[3], `| broken | deepseek-chat | - | - | 0.0 | - | - | - | ${"x".repeat(59)}… |`);
+  assert.equal(answerTokens(variants[0] ?? variants[1]!), 50);
+  assert.equal(answerTokens(variants[1]!), null);
+
+  const report = renderComparisonReport(
+    {
+      id: "c_two",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      configs: ["slow|pipe", "broken"],
+      systemPreset: null,
+      userPreset: null,
+      input: "q",
+      sessionId: null,
+      fromNodeId: null,
+    },
+    variants,
+  );
+  assert.doesNotMatch(report, /### Reasoning/);
+  assert.doesNotMatch(report, /想/);
+  assert.match(report, /> error: x{80}/);
+
+  const output = renderVariantMarkdown(variants[0]!);
+  assert.doesNotMatch(output, /想/);
+  assert.match(output, /^A$/m);
+  const reasoning = renderVariantReasoning(variants[0]!);
+  assert.match(reasoning, /^# Reasoning slow\|pipe/);
+  assert.match(reasoning, /^想$/m);
+  assert.doesNotMatch(reasoning, /^A$/m);
 });

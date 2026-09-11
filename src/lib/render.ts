@@ -99,6 +99,58 @@ export function renderTree(nodes: SessionNode[], branches: BranchRecord[]): stri
   return ["分支：", ...branchLines, "", "树：", ...lines].join("\n");
 }
 
+/** 表格单元格：去掉换行、转义竖线。 */
+function cell(text: string): string {
+  return text.replace(/\s+/gu, " ").replace(/\|/gu, "\\|").trim();
+}
+
+function truncateCell(text: string, max = 60): string {
+  const compact = cell(text);
+  return compact.length <= max ? compact : `${compact.slice(0, max - 1)}…`;
+}
+
+function seconds(ms: number): string {
+  return (ms / 1000).toFixed(1);
+}
+
+function intOrDash(value: number | null | undefined): string {
+  return value === null || value === undefined || Number.isNaN(value) ? "-" : String(Math.round(value));
+}
+
+/** 成稿 token：网关的 completion_tokens 含推理，能减就减掉。 */
+export function answerTokens(variant: ComparisonVariant): number | null {
+  if (variant.usage === null) {
+    return null;
+  }
+  const { completionTokens, reasoningTokens } = variant.usage;
+  if (reasoningTokens !== null && reasoningTokens <= completionTokens) {
+    return completionTokens - reasoningTokens;
+  }
+  return completionTokens;
+}
+
+/** 每路一行、行序 = 输入顺序的汇总表；report.md 与终端共用。 */
+export function renderSummaryTable(variants: ComparisonVariant[]): string {
+  const header = "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |";
+  const divider = "|---|---|---|---|---:|---:|---:|---:|---|";
+  const rows = variants.map((variant) =>
+    [
+      "",
+      cell(variant.configName),
+      cell(variant.config.model),
+      variant.config.thinking ?? "-",
+      variant.config.reasoningEffort ?? "-",
+      seconds(variant.latencyMs),
+      intOrDash(variant.usage?.reasoningTokens),
+      intOrDash(answerTokens(variant)),
+      intOrDash(variant.usage?.totalTokens),
+      variant.error === null ? "-" : truncateCell(variant.error),
+      "",
+    ].join(" | ").trim(),
+  );
+  return [header, divider, ...rows].join("\n");
+}
+
 export function renderComparisonReport(
   spec: ComparisonSpec,
   variants: ComparisonVariant[],
@@ -113,6 +165,12 @@ export function renderComparisonReport(
     `- session: ${spec.sessionId ?? "null"}`,
     `- from: ${spec.fromNodeId ?? "null"}`,
     "",
+    "## 汇总",
+    "",
+    renderSummaryTable(variants),
+    "",
+    "思维链在 `variants/<配置>/reasoning.md`。",
+    "",
     "## Input",
     "",
     spec.input,
@@ -120,53 +178,39 @@ export function renderComparisonReport(
   ];
 
   for (const variant of variants) {
-    lines.push(
-      `## ${variant.configName}`,
-      "",
-      `- provider: ${variant.config.provider ?? "null"}`,
-      `- model: ${variant.config.model}`,
-      `- baseURL: ${variant.config.baseURL}`,
-      `- temperature: ${String(variant.config.temperature)}`,
-      `- maxTokens: ${String(variant.config.maxTokens)}`,
-      `- thinking: ${variant.config.thinking ?? "null"}`,
-      `- reasoningEffort: ${variant.config.reasoningEffort ?? "null"}`,
-      `- latencyMs: ${String(variant.latencyMs)}`,
-      `- error: ${variant.error ?? "null"}`,
-      `- nodeId: ${variant.nodeId ?? "null"}`,
-    );
-    if (variant.usage !== null) {
-      lines.push(
-        `- promptTokens: ${String(variant.usage.promptTokens)}`,
-        `- completionTokens: ${String(variant.usage.completionTokens)}`,
-        `- totalTokens: ${String(variant.usage.totalTokens)}`,
-      );
-      if (variant.usage.reasoningTokens !== null) {
-        lines.push(`- reasoningTokens: ${String(variant.usage.reasoningTokens)}`);
-      }
+    lines.push(`## ${variant.configName}`, "");
+    if (variant.error !== null) {
+      lines.push(`> error: ${variant.error}`, "");
     }
-    if (variant.reasoning !== null && variant.reasoning !== "") {
-      lines.push("", "### Reasoning", "", variant.reasoning);
-    }
-    lines.push("", variant.assistant || "_(empty)_", "");
+    lines.push(variant.assistant || "_(empty)_", "");
   }
   return lines.join("\n");
 }
 
-export function renderVariantMarkdown(variant: ComparisonVariant): string {
+function variantHeader(title: string, variant: ComparisonVariant): string[] {
   return [
-    `# Variant ${variant.configName}`,
+    `# ${title} ${variant.configName}`,
     "",
     `- provider: ${variant.config.provider ?? "null"}`,
     `- model: ${variant.config.model}`,
     `- baseURL: ${variant.config.baseURL}`,
+    `- thinking: ${variant.config.thinking ?? "null"}`,
+    `- reasoningEffort: ${variant.config.reasoningEffort ?? "null"}`,
+    `- latencyMs: ${String(variant.latencyMs)}`,
     `- error: ${variant.error ?? "null"}`,
+    `- nodeId: ${variant.nodeId ?? "null"}`,
     "",
-    ...(variant.reasoning !== null && variant.reasoning !== ""
-      ? ["### Reasoning", "", variant.reasoning, ""]
-      : []),
-    variant.assistant || "_(empty)_",
-    "",
-  ].join("\n");
+  ];
+}
+
+/** `variants/<name>/output.md`：只有成稿。 */
+export function renderVariantMarkdown(variant: ComparisonVariant): string {
+  return [...variantHeader("Variant", variant), variant.assistant || "_(empty)_", ""].join("\n");
+}
+
+/** `variants/<name>/reasoning.md`：只有思维链。没有思维链时调用方不落盘。 */
+export function renderVariantReasoning(variant: ComparisonVariant): string {
+  return [...variantHeader("Reasoning", variant), variant.reasoning ?? "", ""].join("\n");
 }
 
 export function truncateTitle(text: string, max = 40): string {
