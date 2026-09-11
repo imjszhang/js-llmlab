@@ -130,9 +130,9 @@ test("汇总表：行序 = 输入顺序，耗时 1 位小数，缺失为 -，错
   const table = renderSummaryTable(variants);
   const rows = table.split("\n");
   assert.equal(rows.length, 4);
-  assert.equal(rows[0], "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |");
-  assert.equal(rows[2], "| slow\\|pipe | deepseek-chat | enabled | max | 12.3 | 300 | 50 | 450 | - | - |");
-  assert.equal(rows[3], `| broken | deepseek-chat | - | - | 0.0 | - | - | - | - | ${"x".repeat(59)}… |`);
+  assert.equal(rows[0], "| 配置 | provider | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |");
+  assert.equal(rows[2], "| slow\\|pipe | llmcore | deepseek-chat | enabled | max | 12.3 | 300 | 50 | 450 | - | - |");
+  assert.equal(rows[3], `| broken | llmcore | deepseek-chat | - | - | 0.0 | - | - | - | - | ${"x".repeat(59)}… |`);
   assert.equal(answerTokens(variants[0] ?? variants[1]!), 50);
   assert.equal(answerTokens(variants[1]!), null);
 

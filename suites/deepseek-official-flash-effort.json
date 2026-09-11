@@ -1,0 +1,9 @@
+{
+  "name": "deepseek-official-flash-effort",
+  "configs": [
+    "ds-official-flash",
+    "ds-official-flash-reason-low",
+    "ds-official-flash-reason",
+    "ds-official-flash-reason-max"
+  ]
+}

@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- 命名配置 `ds-official-flash` 以及 `ds-official-flash-reason-low` / `ds-official-flash-reason` / `ds-official-flash-reason-max`：走官方 DeepSeek（`providers/deepseek.json`，`https://api.deepseek.com`），模型 `deepseek-flash`；关 thinking 的一路加入 `suites/deepseek`，四档推理强度在 `suites/deepseek-official-flash-effort`。官方 provider 默认模型改为 `deepseek-flash`。
+
+### Changed
+
+- 对比汇总表在「配置」后加 `provider` 列，官方 DeepSeek 与 llmcore 同场时一眼能分开。
+
 ## [0.5.0] - 2026-09-11
 
 M3 稳健与可发现：网关抽风有重试、有 raw 可查、有 retry 可补；结果有 ls / show 可找；`run` 能流式、能看进度；同请求的路自动合并。

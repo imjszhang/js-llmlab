@@ -1,0 +1,9 @@
+{
+  "name": "ds-official-flash-reason-max",
+  "provider": "deepseek",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoningEffort": "max",
+  "temperature": 0.3,
+  "maxTokens": 16384
+}

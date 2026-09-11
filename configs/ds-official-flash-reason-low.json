@@ -1,0 +1,9 @@
+{
+  "name": "ds-official-flash-reason-low",
+  "provider": "deepseek",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoningEffort": "low",
+  "temperature": 0.3,
+  "maxTokens": 8192
+}
