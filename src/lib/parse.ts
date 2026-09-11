@@ -8,6 +8,7 @@ import type {
   Pricing,
   SessionNode,
   TokenUsage,
+  VariantRun,
   VariantScore,
 } from "../types.ts";
 import { DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS } from "./config.ts";
@@ -148,7 +149,7 @@ export function parseComparisonSpec(raw: unknown): ComparisonSpec {
   if (!isRecord(raw) || !Array.isArray(raw.configs)) {
     throw new Error("spec.json 格式无效");
   }
-  return {
+  const spec: ComparisonSpec = {
     id: requireString(raw.id, "id"),
     createdAt: requireString(raw.createdAt, "createdAt"),
     configs: raw.configs.map((item, index) => requireString(item, `configs[${String(index)}]`)),
@@ -157,6 +158,28 @@ export function parseComparisonSpec(raw: unknown): ComparisonSpec {
     input: requireString(raw.input, "input"),
     sessionId: requireNullableString(raw.sessionId, "sessionId"),
     fromNodeId: requireNullableString(raw.fromNodeId, "fromNodeId"),
+  };
+  const repeat = nullableNumber(raw.repeat);
+  if (repeat !== null && repeat > 1) {
+    spec.repeat = repeat;
+  }
+  return spec;
+}
+
+/** 一次采样（成稿从节点来时由 store 填；fixture 里直接带）。 */
+export function parseVariantRun(raw: unknown, field = "run"): VariantRun {
+  if (!isRecord(raw)) {
+    throw new Error(`${field} 格式无效`);
+  }
+  return {
+    nodeId: requireNullableString(raw.nodeId, `${field}.nodeId`),
+    assistant: typeof raw.assistant === "string" ? raw.assistant : "",
+    reasoning: requireNullableString(raw.reasoning, `${field}.reasoning`),
+    usage: parseUsage(raw.usage),
+    latencyMs: Number(raw.latencyMs),
+    error: requireNullableString(raw.error, `${field}.error`),
+    cost: parseCost(raw.cost),
+    requestId: requireNullableString(raw.requestId, `${field}.requestId`),
   };
 }
 
@@ -191,6 +214,22 @@ export function parseVariantScore(raw: unknown): VariantScore {
   if (raw.judge !== undefined && raw.judge !== null) {
     score.judge = parseJudgeVerdict(raw.judge);
   }
+  if (Array.isArray(raw.runs) && raw.runs.length > 1) {
+    score.runs = raw.runs.map((item, index) => {
+      if (!isRecord(item)) {
+        throw new Error(`scores.variants[].runs[${String(index)}] 格式无效`);
+      }
+      const runRatio = nullableNumber(item.changeRatio);
+      if (runRatio === null) {
+        throw new Error(`scores.variants[].runs[${String(index)}].changeRatio 必须是数字`);
+      }
+      return {
+        nodeId: requireNullableString(item.nodeId, "runs[].nodeId"),
+        similarity: nullableNumber(item.similarity),
+        changeRatio: runRatio,
+      };
+    });
+  }
   return score;
 }
 
@@ -220,16 +259,13 @@ export function parseComparisonVariant(raw: unknown): ComparisonVariant {
   if (!isRecord(raw)) {
     throw new Error("variant 格式无效");
   }
-  return {
+  const variant: ComparisonVariant = {
     configName: requireString(raw.configName, "configName"),
     config: parseConfigSnapshot(raw.config),
-    assistant: typeof raw.assistant === "string" ? raw.assistant : "",
-    reasoning: requireNullableString(raw.reasoning, "reasoning"),
-    usage: parseUsage(raw.usage),
-    latencyMs: Number(raw.latencyMs),
-    error: requireNullableString(raw.error, "error"),
-    nodeId: requireNullableString(raw.nodeId, "nodeId"),
-    cost: parseCost(raw.cost),
-    requestId: requireNullableString(raw.requestId, "requestId"),
+    ...parseVariantRun(raw, "variant"),
   };
+  if (Array.isArray(raw.runs) && raw.runs.length > 1) {
+    variant.runs = raw.runs.map((item, index) => parseVariantRun(item, `runs[${String(index)}]`));
+  }
+  return variant;
 }

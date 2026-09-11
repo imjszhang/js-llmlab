@@ -15,6 +15,7 @@ import type {
   RawCapture,
   SessionMeta,
   SessionNode,
+  VariantRun,
 } from "../types.ts";
 import { redactSecrets } from "./client.ts";
 import { safeVariantName } from "./config.ts";
@@ -23,6 +24,7 @@ import {
   isRecord,
   parseComparisonScores,
   parseComparisonSpec,
+  parseConfigSnapshot,
   parseSessionNode,
   requireNullableString,
   requireString,
@@ -33,7 +35,8 @@ import {
   getSessionsDir,
   sessionDir,
 } from "./paths.ts";
-import { renderTurn, renderVariantMarkdown, renderVariantReasoning } from "./render.ts";
+import { renderTurn, renderVariantMarkdown, renderVariantReasoning, renderVariantRun } from "./render.ts";
+import { runFromNode, variantFromRuns } from "./runs.ts";
 
 function writeJson(filePath: string, value: unknown): void {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -235,11 +238,14 @@ export class LabStore {
     return dir;
   }
 
-  /** 只写一路的 `variants/<name>/`（meta.json、output.md、reasoning.md）；补跑单路时用。 */
+  /**
+   * 只写一路的 `variants/<name>/`（meta.json、output.md、reasoning.md）；补跑单路时用。
+   * `--repeat n` 时 meta.json 多 `runs`（无正文，正文在节点），并逐次写 `run-<k>.md`；`output.md` 是第 1 次。
+   */
   writeVariant(comparisonId: string, variant: ComparisonVariant): string {
     const variantDir = path.join(comparisonDir(this.root, comparisonId), "variants", safeVariantName(variant.configName));
     mkdirSync(variantDir, { recursive: true });
-    writeJson(path.join(variantDir, "meta.json"), {
+    const meta: Record<string, unknown> = {
       configName: variant.configName,
       config: variant.config,
       usage: variant.usage,
@@ -248,7 +254,30 @@ export class LabStore {
       nodeId: variant.nodeId,
       cost: variant.cost,
       requestId: variant.requestId,
-    });
+    };
+    for (const file of readdirSync(variantDir)) {
+      if (/^run-\d+\.md$/u.test(file)) {
+        rmSync(path.join(variantDir, file));
+      }
+    }
+    if (variant.runs !== undefined && variant.runs.length > 1) {
+      meta.runs = variant.runs.map((run) => ({
+        nodeId: run.nodeId,
+        usage: run.usage,
+        latencyMs: run.latencyMs,
+        error: run.error,
+        cost: run.cost,
+        requestId: run.requestId,
+      }));
+      variant.runs.forEach((run, index) => {
+        writeFileSync(
+          path.join(variantDir, `run-${String(index + 1)}.md`),
+          renderVariantRun(variant, run, index + 1),
+          "utf8",
+        );
+      });
+    }
+    writeJson(path.join(variantDir, "meta.json"), meta);
     writeFileSync(path.join(variantDir, "output.md"), renderVariantMarkdown(variant), "utf8");
     const reasoningPath = path.join(variantDir, "reasoning.md");
     if (variant.reasoning !== null && variant.reasoning !== "") {
@@ -314,24 +343,26 @@ export class LabStore {
       if (!isRecord(meta)) {
         throw new Error(`对比 ${comparisonId} 的 ${ref}/meta.json 格式无效`);
       }
-      const nodeId = requireNullableString(meta.nodeId, "nodeId");
-      if (spec.sessionId === null || nodeId === null) {
-        throw new Error(`对比 ${comparisonId} 的 ${ref} 没有关联节点，无法读回成稿`);
+      const sessionId = spec.sessionId;
+      if (sessionId === null) {
+        throw new Error(`对比 ${comparisonId} 没有关联会话，无法读回成稿`);
       }
-      const node = this.getNode(spec.sessionId, nodeId);
-      const variant: ComparisonVariant = {
-        configName: ref,
-        config: node.config,
-        assistant: node.messages.assistant,
-        reasoning: node.messages.reasoning,
-        usage: node.usage,
-        latencyMs: node.latencyMs,
-        error: node.error,
-        nodeId,
-        cost: node.cost,
-        requestId: node.requestId,
+      const readRun = (rawNodeId: unknown, label: string): VariantRun => {
+        const nodeId = requireNullableString(rawNodeId, label);
+        if (nodeId === null) {
+          throw new Error(`对比 ${comparisonId} 的 ${ref} 没有关联节点，无法读回成稿`);
+        }
+        return runFromNode(this.getNode(sessionId, nodeId));
       };
-      return variant;
+      const runs: VariantRun[] =
+        Array.isArray(meta.runs) && meta.runs.length > 1
+          ? meta.runs.map((item, index) =>
+              readRun(isRecord(item) ? item.nodeId : null, `runs[${String(index)}].nodeId`),
+            )
+          : [readRun(meta.nodeId, "nodeId")];
+      const firstNodeId = runs[0]?.nodeId ?? null;
+      const config = firstNodeId === null ? parseConfigSnapshot(meta.config) : this.getNode(sessionId, firstNodeId).config;
+      return variantFromRuns(ref, config, runs);
     });
     return { spec, variants, dir };
   }

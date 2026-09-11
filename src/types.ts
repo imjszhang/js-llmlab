@@ -149,19 +149,37 @@ export type ComparisonSpec = {
   input: string;
   sessionId: string | null;
   fromNodeId: string | null;
+  /** `--repeat n`（n > 1）时记录；单次采样没有这个 key。 */
+  repeat?: number;
 };
 
-export type ComparisonVariant = {
-  configName: string;
-  config: ConfigSnapshot;
+/** 一路里的一次采样。单次采样时这一路本身就是唯一的 run。 */
+export type VariantRun = {
+  nodeId: string | null;
   assistant: string;
   reasoning: string | null;
   usage: TokenUsage | null;
   latencyMs: number;
   error: string | null;
-  nodeId: string | null;
   cost: Cost | null;
   requestId: string | null;
+};
+
+/**
+ * 对比里的一路。顶层字段 = 第 1 次采样（`output.md` 与报表正文用它）；
+ * `runs` 只在 `--repeat n`（n > 1）时存在，含第 1 次在内的全部采样，汇总表按它算均值与极差。
+ */
+export type ComparisonVariant = VariantRun & {
+  configName: string;
+  config: ConfigSnapshot;
+  runs?: VariantRun[];
+};
+
+/** repeat > 1 时每次采样的离线指标。 */
+export type RunScore = {
+  nodeId: string | null;
+  similarity: number | null;
+  changeRatio: number;
 };
 
 /** LLM 裁判对一路的裁决。解析失败或请求失败时 `score` 为 null、`error` 有值。 */
@@ -191,8 +209,10 @@ export type VariantScore = {
   changeRatio: number;
   /** changeRatio < 0.05，几乎没改。 */
   barelyChanged: boolean;
-  /** 带 `--judge` 时才有。 */
+  /** 带 `--judge` 时才有；repeat > 1 时只评第 1 次成稿。 */
   judge?: JudgeVerdict;
+  /** repeat > 1 时每次采样的指标（只算成功的）；顶层 similarity / changeRatio 是它们的均值。 */
+  runs?: RunScore[];
 };
 
 export type ComparisonScores = {
@@ -231,6 +251,8 @@ export type SharedCliOptions = {
   dryRun?: boolean;
   /** compare 并发路数，缺省 3。 */
   concurrency?: string;
+  /** compare 每路重复采样次数，缺省 1。 */
+  repeat?: string;
 };
 
 /** `--dry-run` 的一路输出：配置快照、密钥状态、消息与将发送的请求体。 */

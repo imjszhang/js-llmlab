@@ -57,6 +57,7 @@ npx tsx src/cli.ts run --config ds-v4-pro-reason --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --configs ds-v4-flash,ds-v4-pro --message '...'
 npx tsx src/cli.ts compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 并行路数，缺省 3
+npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt --repeat 3 --concurrency 9   # 每路 3 次，看均值与极差
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt   # 离线算相似度 / 改动率，不发请求
 npx tsx src/cli.ts compare score <c_id> --reference data/tmp/gold.txt --judge ds-v4-pro-reason --concurrency 8   # LLM 裁判，会发请求
 npx tsx src/cli.ts compare retry <c_id> [--only a,b]   # 只补跑失败路；--only 指定的路无论成败都重跑
@@ -100,6 +101,8 @@ fixture 与黄金文件：
 - `--thinking` / `--reasoning-effort` **会**作用到所有路
 - suite / `--configs` / `--models` 可并用，按名字去重后至少两路；再按解析快照（provider、baseURL、model、thinking、effort、temperature、maxTokens）去重，名字不同但请求相同的路只跑一次并在终端提示（`--configs ds-v4-flash --models deepseek-v4-flash` 只跑一路）
 - 各路并行，缺省并发 3；`--concurrency <n>` 必须是 ≥ 1 的整数。报表顺序 = 输入顺序，与谁先完成无关。跑 8 路想最快就 `--concurrency 8`
+- 要下「A 比 B 好」的结论先 `--repeat 3`（≥ 1 的整数）：每路 n 次、同一父节点、互不串联；表里 `均值 (最小–最大)` 只算成功的次数。单次结果的排名基本是噪声：实测 flash 三档 effort 各跑 3 次，推理 token 极差是均值的 2–3 倍（low 97 (31–216)、high 32 (25–40)、max 68 (21–160)），`low < high < max` 根本不成立
+- `--repeat` 时 `spec.repeat`、`meta.json.runs`、`variants/<配置>/run-<k>.md` 才出现；`--repeat 1` 与不带完全一样。`compare score` 逐次算再取均值（`scores.json` 的 `runs`），裁判只评第 1 次；`compare retry` 只补跑失败的那几次
 - 默认 system 预设是 `default`（`prompts/system/default.md`：准确简洁）。测文风时先想清楚要不要换 system
 
 suite 文件形状：`{ "name": "...", "configs": ["a", "b"] }`，放在 `suites/<name>.json`。
