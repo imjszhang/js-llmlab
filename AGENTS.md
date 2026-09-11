@@ -124,6 +124,18 @@ data/tmp/                      一次性输入
 
 用户没说「提交 / 同步」就不要 `git commit` / `git push`。
 
+## 工程流程
+
+改动走 GitHub，不直接推 `master`（分支保护已开：必须走 PR，CI 不绿合不进）。
+
+1. **先有 issue。** 用「任务」模板，验收标准写成 checklist，每条能被人或测试独立判真假。写不出验收标准的需求不开工。
+2. **里程碑顺序：** M0 地基 → M1 并行与报表 → M2 评估与成本 → M3 稳健与可发现。M0 未合并前不开功能 PR。M2 与 M3 内部可并行。
+3. **一个 issue 一个分支一个 PR。** 分支名 `feat/<issue号>-<短名>`、`fix/...`、`chore/...`。PR 标题 `type(area): 一句话`，正文用模板，写 `Closes #<n>`。
+4. **CI 自动跑** typecheck、test、离线冒烟。CI 里没有真实 key，也不允许打网关。
+5. **带 `needs-live-check` 的 PR**，还要人在本地打一次真实网关，把 `c_id` 和汇总表贴进 PR。不贴证据不合并。
+6. **改了渲染** 就更新 `tests/golden/` 并在 PR 里说明；**改了 CLI 行为或落盘格式** 就同步 README 与本文；每个 PR 在 `CHANGELOG.md` 的 Unreleased 加一行。
+7. **squash 合并**，删分支。每完成一个里程碑：升版本、打 tag、发 Release，Release notes 从 CHANGELOG 拷。
+
 ## 改代码时
 
 - 严格模式已开：`exactOptionalPropertyTypes`、`verbatimModuleSyntax`、`noUncheckedIndexedAccess`
