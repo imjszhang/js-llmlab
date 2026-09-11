@@ -140,6 +140,7 @@ export function parseSessionNode(raw: unknown): SessionNode {
     latencyMs: Number(raw.latencyMs),
     error: requireNullableString(raw.error, "error"),
     cost: parseCost(raw.cost),
+    requestId: requireNullableString(raw.requestId, "requestId"),
   };
 }
 
@@ -229,5 +230,6 @@ export function parseComparisonVariant(raw: unknown): ComparisonVariant {
     error: requireNullableString(raw.error, "error"),
     nodeId: requireNullableString(raw.nodeId, "nodeId"),
     cost: parseCost(raw.cost),
+    requestId: requireNullableString(raw.requestId, "requestId"),
   };
 }

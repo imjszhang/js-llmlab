@@ -135,7 +135,9 @@ data/comparisons/<c_id>/       spec.json、report.md（汇总表 + Input + 各�
 data/tmp/                      一次性输入
 ```
 
-节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token，`cost` 是按配置 pricing 算出的花费（没配为 null）。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
+节点里：`messages.assistant` 是成稿，`messages.reasoning` 是思维链，`usage.reasoningTokens` 是推理 token，`cost` 是按配置 pricing 算出的花费（没配为 null），`requestId` 是网关响应头里的 request id（llmcore 用 `x-oneapi-request-id`；没有为 null）。`run` 终端只打 assistant；推理看 turn md 或 compare 的 `variants/<配置>/reasoning.md`。
+
+节点旁边的 `nodes/<id>.raw.json` 是原始材料：请求体（无密钥）、原始响应（流式为拼接后的最终对象 + `chunkCount`）、`systemFingerprint`、像 id 的响应头、失败时的 `error` 序列化。要查「effort 有没有进请求体」「网关回了什么字段」读它，别猜。`store.readNodeRaw` 可读；`listNodes` 会跳过 `.raw.json`。写盘经过 `redactSecrets`，当前 apiKey 一律 `***`；节点 `error` 文本也同样打码。
 
 compare 的 `report.md` 不含思维链；开头的汇总表每路一行、行序 = 输入顺序，「成稿 tok」= completion − reasoning（网关的 completion_tokens 含推理）。要看耗时 / token / 错误，读表就够，不用翻正文。
 

@@ -160,6 +160,7 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
       error: node.error,
       nodeId: node.id,
       cost: node.cost,
+      requestId: node.requestId,
     };
     return variant;
   });

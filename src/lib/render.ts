@@ -36,6 +36,7 @@ export function renderTurn(node: SessionNode): string {
     `- userPreset: ${node.userPreset ?? "null"}`,
     `- latencyMs: ${String(node.latencyMs)}`,
     `- error: ${node.error ?? "null"}`,
+    `- requestId: ${node.requestId ?? "null"}`,
   ];
   if (node.usage !== null) {
     lines.push(

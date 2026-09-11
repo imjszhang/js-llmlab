@@ -1,7 +1,11 @@
-import type { ChatMessage, ResolvedConfig, SessionNode } from "../types.ts";
+import type { ChatMessage, RawCapture, ResolvedConfig, SessionNode } from "../types.ts";
 import {
+  buildChatRequest,
   formatError,
+  redactSecrets,
+  requestIdFromError,
   runCompletion,
+  serializeError,
   withRetries,
   type Completer,
   type CompletionOptions,
@@ -117,14 +121,18 @@ export async function appendTurn(params: {
   const createdAt = new Date().toISOString();
   const writeOptions = { touchSession: params.touchSession !== false };
 
+  const completion = params.completion ?? {};
+  const snapshot = toSnapshot(config);
+
   let node: SessionNode;
+  let raw: RawCapture;
   try {
-    const result = await complete(config, messages, params.completion ?? {});
+    const result = await complete(config, messages, completion);
     node = {
       id: nodeId,
       parentId,
       createdAt,
-      config: toSnapshot(config),
+      config: snapshot,
       systemPreset,
       userPreset,
       messages: {
@@ -137,13 +145,24 @@ export async function appendTurn(params: {
       latencyMs: result.latencyMs,
       error: null,
       cost: computeCost(result.usage, config.pricing),
+      requestId: result.requestId,
+    };
+    raw = result.raw ?? {
+      request: buildChatRequest(snapshot, messages, completion.stream === true),
+      response: null,
+      chunkCount: null,
+      requestId: result.requestId,
+      systemFingerprint: null,
+      headers: {},
+      error: null,
     };
   } catch (error) {
+    const requestId = requestIdFromError(error);
     node = {
       id: nodeId,
       parentId,
       createdAt,
-      config: toSnapshot(config),
+      config: snapshot,
       systemPreset,
       userPreset,
       messages: {
@@ -154,11 +173,23 @@ export async function appendTurn(params: {
       },
       usage: null,
       latencyMs: 0,
-      error: formatError(error),
+      // 网关的报错文本偶尔会回显请求头，密钥一律打码再落盘。
+      error: redactSecrets(formatError(error), [config.apiKey]),
       cost: null,
+      requestId,
+    };
+    raw = {
+      request: buildChatRequest(snapshot, messages, completion.stream === true),
+      response: null,
+      chunkCount: null,
+      requestId,
+      systemFingerprint: null,
+      headers: {},
+      error: serializeError(error),
     };
   }
   store.writeNode(sessionId, node, writeOptions);
+  store.writeNodeRaw(sessionId, nodeId, raw, [config.apiKey]);
   store.writeBranch(sessionId, { ...branch, head: node.id });
   return node;
 }

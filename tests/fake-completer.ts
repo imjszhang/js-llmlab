@@ -1,4 +1,4 @@
-import type { Completer, CompletionOptions, CompletionResult } from "../src/lib/client.ts";
+import { buildChatRequest, type Completer, type CompletionOptions, type CompletionResult } from "../src/lib/client.ts";
 import type { ChatMessage, ResolvedConfig, TokenUsage } from "../src/types.ts";
 
 /**
@@ -15,6 +15,10 @@ export type FakeReply = {
   failTimes?: number;
   /** 抛错时的消息。 */
   error?: string;
+  /** 模拟网关返回的 x-request-id；缺省 null。 */
+  requestId?: string | null;
+  /** 抛错时附带的 HTTP 状态（模拟 SDK APIError 的 status 字段）。 */
+  status?: number;
 };
 
 export type FakeCall = {
@@ -81,7 +85,14 @@ export function createFakeCompleter(
     const failed = failures.get(key) ?? 0;
     if (failed < failTimes) {
       failures.set(key, failed + 1);
-      throw new Error(rule.error ?? `fake failure for ${key}`);
+      const error = new Error(rule.error ?? `fake failure for ${key}`);
+      if (rule.status !== undefined) {
+        Object.assign(error, { status: rule.status, error: { message: error.message, type: "fake" } });
+      }
+      if (rule.requestId !== undefined && rule.requestId !== null) {
+        Object.assign(error, { requestID: rule.requestId });
+      }
+      throw error;
     }
 
     const text =
@@ -102,11 +113,29 @@ export function createFakeCompleter(
       }
     }
 
+    const requestId = rule.requestId ?? null;
+    const request = buildChatRequest(config, messages, options.stream === true);
     const result: CompletionResult = {
       text,
       reasoning,
       usage: rule.usage === undefined ? defaultUsage(messages, text, reasoning) : rule.usage,
       latencyMs: rule.delayMs ?? 1,
+      requestId,
+      raw: {
+        request,
+        response: {
+          id: "fake-completion",
+          object: "chat.completion",
+          model: config.model,
+          system_fingerprint: "fp_fake",
+          choices: [{ index: 0, message: { role: "assistant", content: text, reasoning_content: reasoning }, finish_reason: "stop" }],
+        },
+        chunkCount: options.stream === true ? 3 : null,
+        requestId,
+        systemFingerprint: "fp_fake",
+        headers: {},
+        error: null,
+      },
     };
     return result;
   };

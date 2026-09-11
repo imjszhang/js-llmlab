@@ -123,7 +123,9 @@ user 预设可用 `{{input}}`。没有占位符时：`run` / `compare` 把预设
 providers/<name>.json
 configs/<name>.json
 suites/<name>.json
-data/sessions/<session-id>/...
+data/sessions/<session-id>/nodes/<node-id>.json          # 节点：配置快照、消息、usage、cost、requestId
+data/sessions/<session-id>/nodes/<node-id>.raw.json      # 原始请求体（无密钥）+ 原始响应 / 错误序列化 + 响应头里的 id
+data/sessions/<session-id>/turns/<node-id>.md            # 人读的 turn
 data/comparisons/<cmp-id>/report.md                    # 汇总表 + 输入 + 各路成稿
 data/comparisons/<cmp-id>/variants/<配置>/output.md     # 该路成稿
 data/comparisons/<cmp-id>/variants/<配置>/reasoning.md  # 该路思维链（没有就不生成）
@@ -131,6 +133,8 @@ data/tmp/                  # 一次性输入草稿，不进 git
 ```
 
 每个会话是一棵树。发请求时用当前 system + 祖先链上的 user/assistant。请求失败也会落盘。
+
+查网关怪癖（`reasoning_content` 形态、effort 是否生效、上游到底路由到谁）看 `nodes/<id>.raw.json`：非流式存完整响应对象，流式存拼接后的最终对象和 `chunkCount`，失败存 `error`（name / message / status / body / requestId）。`requestId` 取响应头 `x-request-id`，没有就依次试 `x-oneapi-request-id`（llmcore 用这个）、`x-keybalancer-request-id`、`request-id`、`cf-ray`，都没有就是 `null`；所有像 id 的响应头都在 `headers` 字段里。写盘前会把当前 apiKey 字符串整体打码成 `***`，raw 文件不进 `report.md` / turn md。
 
 `report.md` 开头是一张汇总表（配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误），`compare` 结束时终端也打这张表。
 

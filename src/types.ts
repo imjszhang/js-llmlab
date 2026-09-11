@@ -102,6 +102,27 @@ export type SessionNode = {
   latencyMs: number;
   error: string | null;
   cost: Cost | null;
+  /** 网关响应头 `x-request-id`；没返回或老节点为 null。 */
+  requestId: string | null;
+};
+
+/**
+ * 一次调用的原始材料，落在 `nodes/<id>.raw.json`，查网关怪癖用。
+ * 请求体不含密钥；写盘前还会把当前 apiKey 字符串整体打码兜底。
+ */
+export type RawCapture = {
+  /** 发出去的请求体（`buildChatRequest` 的产物）。 */
+  request: Record<string, unknown>;
+  /** 非流式：完整响应对象；流式：拼接后的最终对象；失败：null。 */
+  response: unknown;
+  /** 流式收到的 chunk 数；非流式 / 失败为 null。 */
+  chunkCount: number | null;
+  requestId: string | null;
+  systemFingerprint: string | null;
+  /** 响应头里所有像 id 的（request / trace / ray）；失败或假 completer 可为空对象。 */
+  headers: Record<string, string>;
+  /** 失败时的错误对象序列化（name / message / status / body …）；成功为 null。 */
+  error: Record<string, unknown> | null;
 };
 
 export type SessionMeta = {
@@ -140,6 +161,7 @@ export type ComparisonVariant = {
   error: string | null;
   nodeId: string | null;
   cost: Cost | null;
+  requestId: string | null;
 };
 
 /** LLM 裁判对一路的裁决。解析失败或请求失败时 `score` 为 null、`error` 有值。 */

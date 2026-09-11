@@ -4,13 +4,17 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions";
-import type { ChatMessage, ConfigSnapshot, ResolvedConfig, TokenUsage } from "../types.ts";
+import type { ChatMessage, ConfigSnapshot, RawCapture, ResolvedConfig, TokenUsage } from "../types.ts";
 
 export type CompletionResult = {
   text: string;
   reasoning: string | null;
   usage: TokenUsage | null;
   latencyMs: number;
+  /** 响应头 `x-request-id`，网关不给就是 null。 */
+  requestId: string | null;
+  /** 原始请求 / 响应，落 `nodes/<id>.raw.json`；假 completer 可以不给。 */
+  raw: RawCapture | null;
 };
 
 export type CompletionOptions = {
@@ -158,6 +162,39 @@ export function buildChatRequest(
   return params;
 }
 
+/** 按优先级找 request id：标准头之外，llmcore（one-api 系）用 `x-oneapi-request-id`。 */
+export const REQUEST_ID_HEADERS = [
+  "x-request-id",
+  "x-oneapi-request-id",
+  "x-keybalancer-request-id",
+  "request-id",
+  "cf-ray",
+] as const;
+
+export function requestIdFromHeaders(headers: Headers | Record<string, unknown> | undefined): string | null {
+  if (headers === undefined) {
+    return null;
+  }
+  for (const name of REQUEST_ID_HEADERS) {
+    const value = headers instanceof Headers ? headers.get(name) : headers[name];
+    if (typeof value === "string" && value !== "") {
+      return value;
+    }
+  }
+  return null;
+}
+
+/** 响应头里所有像 id 的（request / trace / ray），落 raw 文件方便对账；不会碰请求头。 */
+export function idLikeHeaders(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, name) => {
+    if (/request|trace|ray/iu.test(name)) {
+      out[name] = value;
+    }
+  });
+  return out;
+}
+
 /**
  * 全仓库唯一的类型绕过点。
  *
@@ -182,15 +219,26 @@ export async function runCompletion(
   const stream = options.stream === true;
 
   if (stream) {
-    const response = await client.chat.completions.create(
-      toSdkParams(buildChatRequest(config, messages, true), true),
-    );
+    const request = buildChatRequest(config, messages, true);
+    const { data: response, response: http } = await client.chat.completions
+      .create(toSdkParams(request, true))
+      .withResponse();
+    const requestId = requestIdFromHeaders(http.headers);
 
     let text = "";
     let reasoning = "";
     let usage: TokenUsage | null = null;
+    let rawUsage: unknown = null;
+    let chunkCount = 0;
+    let first: Record<string, unknown> | null = null;
+    let finishReason: string | null = null;
     for await (const chunk of response) {
-      const delta = chunk.choices[0]?.delta;
+      chunkCount += 1;
+      if (first === null) {
+        first = { ...chunk };
+      }
+      const choice = chunk.choices[0];
+      const delta = choice?.delta;
       const content = readStringField(delta, ["content"]);
       if (content !== "") {
         text += content;
@@ -201,22 +249,58 @@ export async function runCompletion(
         reasoning += think;
         options.onReasoningDelta?.(think);
       }
+      if (typeof choice?.finish_reason === "string") {
+        finishReason = choice.finish_reason;
+      }
       const mapped = mapUsage(chunk.usage);
       if (mapped !== null) {
         usage = mapped;
+        rawUsage = chunk.usage;
       }
     }
+    // 流式没有「完整响应对象」，按非流式的形状拼一个，方便对照。
+    const assembled: Record<string, unknown> = {
+      id: first?.id ?? null,
+      object: "chat.completion",
+      created: first?.created ?? null,
+      model: first?.model ?? null,
+      system_fingerprint: first?.system_fingerprint ?? null,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: text,
+            reasoning_content: reasoning === "" ? null : reasoning,
+          },
+          finish_reason: finishReason,
+        },
+      ],
+      usage: rawUsage,
+    };
     return {
       text,
       reasoning: reasoning === "" ? null : reasoning,
       usage,
       latencyMs: Date.now() - started,
+      requestId,
+      raw: {
+        request,
+        response: assembled,
+        chunkCount,
+        requestId,
+        systemFingerprint: typeof first?.system_fingerprint === "string" ? first.system_fingerprint : null,
+        headers: idLikeHeaders(http.headers),
+        error: null,
+      },
     };
   }
 
-  const response = await client.chat.completions.create(
-    toSdkParams(buildChatRequest(config, messages, false), false),
-  );
+  const request = buildChatRequest(config, messages, false);
+  const { data: response, response: http } = await client.chat.completions
+    .create(toSdkParams(request, false))
+    .withResponse();
+  const requestId = requestIdFromHeaders(http.headers);
   const message = response.choices[0]?.message;
   const text = readStringField(message, ["content"]);
   const reasoning = readStringField(message, ["reasoning_content", "reasoning", "thinking"]);
@@ -225,6 +309,16 @@ export async function runCompletion(
     reasoning: reasoning === "" ? null : reasoning,
     usage: mapUsage(response.usage),
     latencyMs: Date.now() - started,
+    requestId,
+    raw: {
+      request,
+      response,
+      chunkCount: null,
+      requestId,
+      systemFingerprint: typeof response.system_fingerprint === "string" ? response.system_fingerprint : null,
+      headers: idLikeHeaders(http.headers),
+      error: null,
+    },
   };
 }
 
@@ -233,6 +327,66 @@ export function formatError(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+/** 把 `secrets`（当前 apiKey）在文本里整体替换成 `***`；空串跳过。落盘前的最后兜底。 */
+export function redactSecrets(text: string, secrets: readonly string[]): string {
+  let out = text;
+  for (const secret of secrets) {
+    if (secret !== "") {
+      out = out.split(secret).join("***");
+    }
+  }
+  return out;
+}
+
+/** 从 SDK 错误上捞 request id（`APIError.requestID`），没有就 null。 */
+export function requestIdFromError(error: unknown): string | null {
+  if (!isRecord(error)) {
+    return null;
+  }
+  for (const key of ["requestID", "request_id", "requestId"]) {
+    const value = error[key];
+    if (typeof value === "string" && value !== "") {
+      return value;
+    }
+  }
+  const headers = error.headers;
+  if (headers instanceof Headers || isRecord(headers)) {
+    return requestIdFromHeaders(headers);
+  }
+  return null;
+}
+
+/**
+ * 把错误对象变成可落盘的 JSON：名字、消息、HTTP 状态、错误体、request id、栈。
+ * 只挑已知字段，不整个序列化，避免把 SDK 内部对象（含请求头）写进文件。
+ */
+export function serializeError(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) {
+    return { name: "Unknown", message: String(error) };
+  }
+  const out: Record<string, unknown> = { name: error.name, message: error.message };
+  const record: Record<string, unknown> = isRecord(error) ? error : {};
+  for (const key of ["status", "code", "type", "param"]) {
+    if (record[key] !== undefined && record[key] !== null) {
+      out[key] = record[key];
+    }
+  }
+  const requestId = requestIdFromError(error);
+  if (requestId !== null) {
+    out.requestId = requestId;
+  }
+  if (record.error !== undefined) {
+    out.body = record.error;
+  }
+  if (error.cause !== undefined) {
+    out.cause = formatError(error.cause);
+  }
+  if (typeof error.stack === "string") {
+    out.stack = error.stack;
+  }
+  return out;
 }
 
 export type ProviderModel = {

@@ -115,6 +115,7 @@ test("run 落盘的节点带 cost，turn md 与汇总表显示成本", async () 
     error: null,
     nodeId: node.id,
     cost: node.cost,
+    requestId: null,
   };
   const table = renderSummaryTable([variant, { ...variant, configName: "free", cost: null }]);
   assert.match(table, /\| priced \| model-p \| .* \| 1500 \| 0\.0060 CNY \| - \|/);

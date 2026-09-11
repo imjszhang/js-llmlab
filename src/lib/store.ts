@@ -12,9 +12,11 @@ import type {
   ComparisonScores,
   ComparisonSpec,
   ComparisonVariant,
+  RawCapture,
   SessionMeta,
   SessionNode,
 } from "../types.ts";
+import { redactSecrets } from "./client.ts";
 import { safeVariantName } from "./config.ts";
 import { createId } from "./ids.ts";
 import {
@@ -148,6 +150,31 @@ export class LabStore {
     return existsSync(path.join(sessionDir(this.root, sessionId), "nodes", `${nodeId}.json`));
   }
 
+  /**
+   * 写 `nodes/<id>.raw.json`：原始请求 / 响应 / 错误。`secrets` 里的字符串
+   * （当前 apiKey）若出现在序列化结果里会整体替换成 `***`，作为不泄密的最后兜底。
+   */
+  writeNodeRaw(sessionId: string, nodeId: string, raw: RawCapture, secrets: string[] = []): string {
+    const filePath = this.nodeRawPath(sessionId, nodeId);
+    const text = redactSecrets(
+      JSON.stringify({ nodeId, capturedAt: new Date().toISOString(), ...raw }, null, 2),
+      secrets,
+    );
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${text}\n`, "utf8");
+    return filePath;
+  }
+
+  nodeRawPath(sessionId: string, nodeId: string): string {
+    return path.join(sessionDir(this.root, sessionId), "nodes", `${nodeId}.raw.json`);
+  }
+
+  /** 读 raw 文件；老节点没有就 null。 */
+  readNodeRaw(sessionId: string, nodeId: string): unknown {
+    const filePath = this.nodeRawPath(sessionId, nodeId);
+    return existsSync(filePath) ? readJson(filePath) : null;
+  }
+
   getNode(sessionId: string, nodeId: string): SessionNode {
     const filePath = path.join(sessionDir(this.root, sessionId), "nodes", `${nodeId}.json`);
     if (!existsSync(filePath)) {
@@ -162,7 +189,7 @@ export class LabStore {
       return [];
     }
     return readdirSync(dir)
-      .filter((file) => file.endsWith(".json"))
+      .filter((file) => file.endsWith(".json") && !file.endsWith(".raw.json"))
       .map((file) => parseSessionNode(readJson(path.join(dir, file))))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
@@ -220,6 +247,7 @@ export class LabStore {
       error: variant.error,
       nodeId: variant.nodeId,
       cost: variant.cost,
+      requestId: variant.requestId,
     });
     writeFileSync(path.join(variantDir, "output.md"), renderVariantMarkdown(variant), "utf8");
     const reasoningPath = path.join(variantDir, "reasoning.md");
@@ -301,6 +329,7 @@ export class LabStore {
         error: node.error,
         nodeId,
         cost: node.cost,
+        requestId: node.requestId,
       };
       return variant;
     });
