@@ -87,7 +87,7 @@ test("run：配置 maxRetries=2 时前两次失败仍落成功节点；--max-ret
   await withEnvAsync(env, () =>
     runOnce(
       { config: "flaky", message: "q" },
-      { root, complete: fake.complete, retryBaseDelayMs: 0, log: (l) => lines.push(l), error: silent },
+      { root, complete: fake.complete, retryBaseDelayMs: 0, log: silent, error: (l) => lines.push(l) },
     ),
   );
   assert.equal(fake.calls.length, 3);

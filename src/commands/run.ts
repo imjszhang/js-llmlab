@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import type { DryRunEntry, SharedCliOptions } from "../types.ts";
-import { buildChatRequest } from "../lib/client.ts";
+import { buildChatRequest, type CompletionOptions } from "../lib/client.ts";
 import { loadEnv, overridesFromCli, peekConfigRef, resolveConfigRef } from "../lib/config.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
 import { renderDryRun, truncateTitle } from "../lib/render.ts";
@@ -8,8 +8,31 @@ import { LabStore } from "../lib/store.ts";
 import { ancestorChain, appendTurn, buildApiMessages } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
 
+/**
+ * 非流式等着网关时，TTY 上每隔 intervalMs 往 stderr 打一行「等待中… Ns」。
+ * 返回停止函数；非 TTY 什么都不做（管道里不出现进度）。
+ */
+function startProgress(params: {
+  enabled: boolean;
+  intervalMs: number;
+  label: string;
+  error: (line: string) => void;
+}): () => void {
+  if (!params.enabled) {
+    return () => {};
+  }
+  const started = Date.now();
+  const timer = setInterval(() => {
+    const elapsed = Math.round((Date.now() - started) / 1000);
+    params.error(chalk.dim(`等待 ${params.label}… ${String(elapsed)}s`));
+  }, params.intervalMs);
+  return () => {
+    clearInterval(timer);
+  };
+}
+
 export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Promise<void> {
-  const { root, complete, log, error } = resolveDeps(deps);
+  const { root, complete, log, write, error, writeErr, isTTY, progressIntervalMs } = resolveDeps(deps);
   loadEnv(root);
   const store = new LabStore(root);
 
@@ -60,7 +83,7 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
       defaultSystem: systemName,
     });
     sessionId = session.id;
-    log(chalk.dim(`新建会话 ${sessionId}`));
+    error(chalk.dim(`新建会话 ${sessionId}`));
   } else if (!store.sessionExists(sessionId)) {
     throw new Error(`找不到会话：${sessionId}`);
   }
@@ -69,25 +92,77 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
     throw new Error(`找不到分支：${branchName}`);
   }
 
-  const node = await appendTurn({
-    store,
-    sessionId,
-    branchName,
-    config,
-    systemText,
-    systemPreset: systemName,
-    userPreset: userName,
-    userText,
-    complete,
+  const stream = options.stream === true;
+  const showReasoning = stream && options.hideReasoning !== true;
+  let reasoningStarted = false;
+  let contentStarted = false;
+  const completion: CompletionOptions = stream
+    ? {
+        stream: true,
+        // 思维链走 stderr（变暗），成稿走 stdout：管道里只拿到成稿。
+        onReasoningDelta: (chunk) => {
+          if (!showReasoning) {
+            return;
+          }
+          if (!reasoningStarted) {
+            error(chalk.dim("[reasoning]"));
+            reasoningStarted = true;
+          }
+          writeErr(chalk.dim(chunk));
+        },
+        onDelta: (chunk) => {
+          if (!contentStarted) {
+            if (reasoningStarted) {
+              writeErr("\n");
+            }
+            contentStarted = true;
+          }
+          write(chunk);
+        },
+      }
+    : {};
+
+  const stopProgress = startProgress({
+    enabled: !stream && isTTY,
+    intervalMs: progressIntervalMs,
+    label: `${config.name} → ${config.model}`,
+    error,
   });
+  let node;
+  try {
+    node = await appendTurn({
+      store,
+      sessionId,
+      branchName,
+      config,
+      systemText,
+      systemPreset: systemName,
+      userPreset: userName,
+      userText,
+      completion,
+      complete,
+    });
+  } finally {
+    stopProgress();
+  }
 
   if (node.error !== null) {
+    if (contentStarted) {
+      write("\n");
+    }
     error(chalk.red(`请求失败：${node.error}`));
     error(chalk.dim(`已落盘 ${node.id}`));
     process.exitCode = 1;
     return;
   }
 
-  log(node.messages.assistant);
-  log(chalk.dim(`\nsession=${sessionId} branch=${branchName} node=${node.id} ${String(node.latencyMs)}ms`));
+  if (stream) {
+    // 增量已经打过；补一个换行结束这一行。没有任何增量（空成稿）就不补。
+    if (contentStarted) {
+      write("\n");
+    }
+  } else {
+    log(node.messages.assistant);
+  }
+  error(chalk.dim(`session=${sessionId} branch=${branchName} node=${node.id} ${String(node.latencyMs)}ms`));
 }

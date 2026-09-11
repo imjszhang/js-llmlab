@@ -92,6 +92,7 @@ js-llmlab config show ds-chat
 js-llmlab chat [--provider llmcore] [--config ds-chat]
 js-llmlab run --config ds-chat --message text
 js-llmlab run --config ds-v4-flash-reason --message text --dry-run   # 只打印配置与请求体，不发请求
+js-llmlab run --config ds-v4-pro-reason-max --stream --input data/tmp/foo.txt   # 成稿边收边打；思维链变暗打到 stderr，--hide-reasoning 关掉
 js-llmlab compare --suite deepseek --message text
 js-llmlab compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 各路并行，缺省并发 3
 js-llmlab compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt --repeat 3   # 每路采样 3 次，表里是 均值 (最小–最大)
@@ -108,6 +109,8 @@ js-llmlab branch create --session id --name alt [--from node]
 ```
 
 `run` / `compare` 加 `--dry-run` 时输出一段 JSON：解析后的配置快照、密钥变量名与是否已设置、messages、将发送的请求体。不需要 key，不建会话，不写 `data/`。
+
+`run` 的 stdout 只有成稿，方便 `> out.md` 或接管道；`新建会话 …`、`session=… node=…`、重试提示、进度都走 stderr。不加 `--stream` 时，如果 stderr 是终端，每 5 秒打一行 `等待 <配置> → <模型>… Ns`，管道里不打。加 `--stream` 时成稿一段段打到 stdout，思维链变暗打到 stderr（`--hide-reasoning` 关掉）；两种方式落盘的节点字段与 usage 口径一样。
 
 `compare` 的各路先按名字去重，再按解析后的快照去重：`--configs ds-v4-flash --models deepseek-v4-flash` 两个名字落到同一个请求，只跑一路，终端会提示被跳过的名字。只差 effort / temperature 等参数的路不会被合并。
 
