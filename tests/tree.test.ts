@@ -31,6 +31,7 @@ function node(
     usage: null,
     latencyMs: 1,
     error: null,
+    cost: null,
   };
 }
 

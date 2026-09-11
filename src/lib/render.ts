@@ -7,6 +7,7 @@ import type {
   JudgeVerdict,
   SessionNode,
 } from "../types.ts";
+import { formatCost } from "./cost.ts";
 
 /** `--dry-run` 输出：纯 JSON，方便人和 agent 直接读。 */
 export function renderDryRun(entries: DryRunEntry[]): string {
@@ -45,6 +46,9 @@ export function renderTurn(node: SessionNode): string {
     if (node.usage.reasoningTokens !== null) {
       lines.push(`- reasoningTokens: ${String(node.usage.reasoningTokens)}`);
     }
+  }
+  if (node.cost !== null) {
+    lines.push(`- cost: ${formatCost(node.cost)}`);
   }
   lines.push("", "## System", "", node.messages.system || "_(empty)_", "", "## User", "", node.messages.user);
   if (node.messages.reasoning !== null && node.messages.reasoning !== "") {
@@ -160,8 +164,8 @@ export function renderSummaryTable(
   const scoreByName = new Map(scores?.variants.map((s) => [s.configName, s]) ?? []);
   const withJudge = scores?.judge !== undefined;
   const header = [
-    "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |",
-    "|---|---|---|---|---:|---:|---:|---:|---|",
+    "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |",
+    "|---|---|---|---|---:|---:|---:|---:|---:|---|",
   ];
   if (scores !== null) {
     header[0] = `${header[0] ?? ""} 相似度 | 改动率 |${withJudge ? " 裁判 |" : ""}`;
@@ -177,6 +181,7 @@ export function renderSummaryTable(
       intOrDash(variant.usage?.reasoningTokens),
       intOrDash(answerTokens(variant)),
       intOrDash(variant.usage?.totalTokens),
+      formatCost(variant.cost),
       variant.error === null ? "-" : truncateCell(variant.error),
     ];
     if (scores !== null) {

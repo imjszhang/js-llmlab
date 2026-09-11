@@ -35,6 +35,7 @@ const node: SessionNode = {
   usage: { promptTokens: 3, completionTokens: 4, totalTokens: 7, reasoningTokens: null },
   latencyMs: 20,
   error: null,
+  cost: null,
 };
 
 test("turn markdown 含正文且不含密钥字段", () => {
@@ -66,6 +67,7 @@ test("对比报告并排两套配置", () => {
       latencyMs: 10,
       error: null,
       nodeId: "n_a",
+      cost: null,
     },
     {
       configName: "deepseek",
@@ -76,6 +78,7 @@ test("对比报告并排两套配置", () => {
       latencyMs: 11,
       error: null,
       nodeId: "n_b",
+      cost: null,
     },
   ];
   const report = renderComparisonReport(spec, variants);
@@ -103,6 +106,7 @@ test("汇总表：行序 = 输入顺序，耗时 1 位小数，缺失为 -，错
       latencyMs: 12345,
       error: null,
       nodeId: "n_a",
+      cost: null,
     },
     {
       configName: "broken",
@@ -113,14 +117,15 @@ test("汇总表：行序 = 输入顺序，耗时 1 位小数，缺失为 -，错
       latencyMs: 0,
       error: longError,
       nodeId: "n_b",
+      cost: null,
     },
   ];
   const table = renderSummaryTable(variants);
   const rows = table.split("\n");
   assert.equal(rows.length, 4);
-  assert.equal(rows[0], "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |");
-  assert.equal(rows[2], "| slow\\|pipe | deepseek-chat | enabled | max | 12.3 | 300 | 50 | 450 | - |");
-  assert.equal(rows[3], `| broken | deepseek-chat | - | - | 0.0 | - | - | - | ${"x".repeat(59)}… |`);
+  assert.equal(rows[0], "| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |");
+  assert.equal(rows[2], "| slow\\|pipe | deepseek-chat | enabled | max | 12.3 | 300 | 50 | 450 | - | - |");
+  assert.equal(rows[3], `| broken | deepseek-chat | - | - | 0.0 | - | - | - | - | ${"x".repeat(59)}… |`);
   assert.equal(answerTokens(variants[0] ?? variants[1]!), 50);
   assert.equal(answerTokens(variants[1]!), null);
 

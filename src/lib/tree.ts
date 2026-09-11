@@ -7,6 +7,7 @@ import {
 } from "./client.ts";
 import { createId } from "./ids.ts";
 import { toSnapshot } from "./config.ts";
+import { computeCost } from "./cost.ts";
 import type { LabStore } from "./store.ts";
 
 export function ancestorChain(
@@ -131,6 +132,7 @@ export async function appendTurn(params: {
       usage: result.usage,
       latencyMs: result.latencyMs,
       error: null,
+      cost: computeCost(result.usage, config.pricing),
     };
   } catch (error) {
     node = {
@@ -149,6 +151,7 @@ export async function appendTurn(params: {
       usage: null,
       latencyMs: 0,
       error: formatError(error),
+      cost: null,
     };
   }
   store.writeNode(sessionId, node, writeOptions);

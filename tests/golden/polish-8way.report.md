@@ -9,16 +9,16 @@
 
 ## 汇总
 
-| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 错误 |
-|---|---|---|---|---:|---:|---:|---:|---|
-| ds-v4-flash | deepseek-v4-flash | disabled | - | 2.7 | 0 | 242 | 522 | - |
-| ds-v4-flash-reason-low | deepseek-v4-flash | enabled | low | 5.8 | 226 | 290 | 796 | - |
-| ds-v4-flash-reason | deepseek-v4-flash | enabled | high | 3.8 | 65 | 264 | 688 | - |
-| ds-v4-flash-reason-max | deepseek-v4-flash | enabled | max | 25.6 | 3344 | 287 | 4003 | - |
-| ds-v4-pro | deepseek-v4-pro | disabled | - | 5.6 | 0 | 259 | 539 | - |
-| ds-v4-pro-reason-low | deepseek-v4-pro | enabled | low | 20.8 | 1269 | 267 | 1816 | - |
-| ds-v4-pro-reason | deepseek-v4-pro | enabled | high | 39.1 | 1714 | 291 | 2285 | - |
-| ds-v4-pro-reason-max | deepseek-v4-pro | enabled | max | 69.1 | 4966 | 278 | 5616 | - |
+| 配置 | 模型 | thinking | effort | 耗时(s) | 推理 tok | 成稿 tok | 总 tok | 成本 | 错误 |
+|---|---|---|---|---:|---:|---:|---:|---:|---|
+| ds-v4-flash | deepseek-v4-flash | disabled | - | 2.7 | 0 | 242 | 522 | - | - |
+| ds-v4-flash-reason-low | deepseek-v4-flash | enabled | low | 5.8 | 226 | 290 | 796 | - | - |
+| ds-v4-flash-reason | deepseek-v4-flash | enabled | high | 3.8 | 65 | 264 | 688 | - | - |
+| ds-v4-flash-reason-max | deepseek-v4-flash | enabled | max | 25.6 | 3344 | 287 | 4003 | - | - |
+| ds-v4-pro | deepseek-v4-pro | disabled | - | 5.6 | 0 | 259 | 539 | - | - |
+| ds-v4-pro-reason-low | deepseek-v4-pro | enabled | low | 20.8 | 1269 | 267 | 1816 | - | - |
+| ds-v4-pro-reason | deepseek-v4-pro | enabled | high | 39.1 | 1714 | 291 | 2285 | - | - |
+| ds-v4-pro-reason-max | deepseek-v4-pro | enabled | max | 69.1 | 4966 | 278 | 5616 | - | - |
 
 思维链在 `variants/<配置>/reasoning.md`。
 

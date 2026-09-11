@@ -32,6 +32,7 @@ function sampleNode(id: string, parentId: string | null): SessionNode {
     usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3, reasoningTokens: null },
     latencyMs: 12,
     error: null,
+    cost: null,
   };
 }
 
@@ -95,6 +96,7 @@ test("writeComparison 后 readComparison 能读回成稿与思维链", () => {
     latencyMs: node.latencyMs,
     error: node.error,
     nodeId: node.id,
+    cost: node.cost,
   }));
   store.writeComparison(spec, variants, "# report");
 
