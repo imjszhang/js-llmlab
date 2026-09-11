@@ -54,6 +54,7 @@ function toShared(options: Record<string, unknown>): SharedCliOptions {
   assign("thinking", options.thinking);
   assign("reasoningEffort", options.reasoningEffort);
   assign("from", options.from);
+  assign("concurrency", options.concurrency);
   if (typeof options.dryRun === "boolean") {
     shared.dryRun = options.dryRun;
   }
@@ -163,6 +164,7 @@ async function main(): Promise<void> {
       .option("--message <text>", "用户输入")
       .option("--input <file>", "从文件读取用户输入")
       .option("--from <node>", "从该节点继续")
+      .option("--concurrency <n>", "并发路数，缺省 3")
       .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
   ).action(async (options: Record<string, unknown>) => {
     await runCompare(toShared(options));

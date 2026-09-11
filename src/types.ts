@@ -134,6 +134,8 @@ export type SharedCliOptions = {
   from?: string;
   /** 只打印解析后的配置与请求体，不发请求、不落盘。 */
   dryRun?: boolean;
+  /** compare 并发路数，缺省 3。 */
+  concurrency?: string;
 };
 
 /** `--dry-run` 的一路输出：配置快照、密钥状态、消息与将发送的请求体。 */

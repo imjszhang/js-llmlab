@@ -14,6 +14,7 @@ import {
   resolveConfigRef,
   safeVariantName,
 } from "../lib/config.ts";
+import { mapWithConcurrency, parseConcurrency } from "../lib/concurrency.ts";
 import { createId } from "../lib/ids.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
 import {
@@ -49,6 +50,7 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   });
   const systemText = resolveSystemText(root, systemName);
   const overrides = compareOverridesFromCli(options);
+  const concurrency = parseConcurrency(options.concurrency);
 
   if (options.dryRun === true) {
     // 不要 key、不建会话、不写 data/。带 --session/--from 时只读祖先链。
@@ -103,8 +105,8 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
     fromNodeId,
   };
 
-  const variants: ComparisonVariant[] = [];
-  for (const ref of refs) {
+  // 先把每路的配置与分支准备好（同步、按输入顺序），再并发发请求。
+  const tasks = refs.map((ref) => {
     const config = resolveConfigRef(root, ref, overrides);
     const branchName = safeVariantName(ref);
     if (!store.branchExists(sessionId, branchName)) {
@@ -115,22 +117,35 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
         head: fromNodeId,
       });
     }
+    return { ref, config, branchName };
+  });
 
-    log(chalk.dim(`运行 ${ref} → ${config.model}...`));
+  const startedAt = Date.now();
+  log(chalk.dim(`${String(tasks.length)} 路，并发 ${String(concurrency)}`));
+  const variants = await mapWithConcurrency(tasks, concurrency, async (task) => {
+    log(chalk.dim(`开始 ${task.ref} → ${task.config.model}`));
+    const begin = Date.now();
     const node = await appendTurn({
       store,
       sessionId,
-      branchName,
+      branchName: task.branchName,
       parentId: fromNodeId,
-      config,
+      config: task.config,
       systemText,
       systemPreset: systemName,
       userPreset: userName,
       userText,
       complete,
+      touchSession: false,
     });
-    variants.push({
-      configName: ref,
+    const elapsed = ((Date.now() - begin) / 1000).toFixed(1);
+    if (node.error !== null) {
+      log(chalk.red(`失败 ${task.ref} ${elapsed}s：${node.error}`));
+    } else {
+      log(chalk.dim(`完成 ${task.ref} ${elapsed}s`));
+    }
+    const variant: ComparisonVariant = {
+      configName: task.ref,
       config: node.config,
       assistant: node.messages.assistant,
       reasoning: node.messages.reasoning,
@@ -138,16 +153,16 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
       latencyMs: node.latencyMs,
       error: node.error,
       nodeId: node.id,
-    });
-    if (node.error !== null) {
-      log(chalk.red(`${ref} 失败：${node.error}`));
-    }
-  }
+    };
+    return variant;
+  });
+  store.touchSession(sessionId);
+  const totalSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 
   const report = renderComparisonReport(spec, variants);
   const dir = store.writeComparison(spec, variants, report);
   log("");
   log(renderSummaryTable(variants));
   log("");
-  log(chalk.dim(`已写入 ${dir}（report.md 含各路成稿，思维链在 variants/<配置>/reasoning.md）`));
+  log(chalk.dim(`总耗时 ${totalSeconds}s，已写入 ${dir}（report.md 含各路成稿，思维链在 variants/<配置>/reasoning.md）`));
 }

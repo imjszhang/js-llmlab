@@ -56,6 +56,7 @@ npx tsx src/cli.ts run --config ds-v4-flash --message '...'
 npx tsx src/cli.ts run --config ds-v4-pro-reason --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --input data/tmp/foo.txt
 npx tsx src/cli.ts compare --configs ds-v4-flash,ds-v4-pro --message '...'
+npx tsx src/cli.ts compare --suite deepseek-v4-pro-effort --input data/tmp/foo.txt --concurrency 8   # 并行路数，缺省 3
 npx tsx src/cli.ts session ls
 npx tsx src/cli.ts session show <id>
 ```
@@ -91,6 +92,7 @@ fixture 与黄金文件：
 - `--model` **不会**冲掉每一路的模型
 - `--thinking` / `--reasoning-effort` **会**作用到所有路
 - suite / `--configs` / `--models` 可并用，去重后至少两路
+- 各路并行，缺省并发 3；`--concurrency <n>` 必须是 ≥ 1 的整数。报表顺序 = 输入顺序，与谁先完成无关。跑 8 路想最快就 `--concurrency 8`
 - 默认 system 预设是 `default`（`prompts/system/default.md`：准确简洁）。测文风时先想清楚要不要换 system
 
 suite 文件形状：`{ "name": "...", "configs": ["a", "b"] }`，放在 `suites/<name>.json`。
