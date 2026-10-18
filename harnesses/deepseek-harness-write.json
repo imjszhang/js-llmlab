@@ -1,0 +1,6 @@
+{
+  "name": "deepseek-harness-write",
+  "adapter": "deepseek-harness",
+  "executable": "dsh",
+  "permission": "workspace-write"
+}

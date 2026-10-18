@@ -5,6 +5,8 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions";
 import type { ChatMessage, ConfigSnapshot, RawCapture, ResolvedConfig, TokenUsage } from "../types.ts";
+import { validateApiMessages, validateRequestExtras } from "./chat-options.ts";
+import { isAnthropicProvider, validateAnthropicChatRequest } from "./anthropic.ts";
 
 export type CompletionResult = {
   text: string;
@@ -15,12 +17,20 @@ export type CompletionResult = {
   requestId: string | null;
   /** 原始请求 / 响应，落 `nodes/<id>.raw.json`；假 completer 可以不给。 */
   raw: RawCapture | null;
+  /** 服务端返回的实际模型 / 版本名称，用于识别滚动升级。 */
+  responseModel?: string;
+  /** 高级请求的完整 assistant 消息，供后续工具调用原样回传。 */
+  assistantMessage?: Record<string, unknown>;
 };
 
 export type CompletionOptions = {
+  /** 整次执行预算到期时取消请求；也供 withRetries 停止后续尝试。 */
+  signal?: AbortSignal;
   stream?: boolean;
   onDelta?: (chunk: string) => void;
   onReasoningDelta?: (chunk: string) => void;
+  /** 附加请求参数；messages 可为包含图片、工具结果及 reasoning_content 的完整历史。 */
+  request?: Record<string, unknown>;
 };
 
 /**
@@ -33,10 +43,10 @@ export type Completer = (
   options?: CompletionOptions,
 ) => Promise<CompletionResult>;
 
-export function createClient(config: ResolvedConfig): OpenAI {
+export function createClient(config: ResolvedConfig, baseURL = config.baseURL): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,
-    baseURL: config.baseURL,
+    baseURL,
     timeout: config.timeoutMs,
     // 重试在 withRetries 里做，SDK 自己的关掉，避免双重重试。
     maxRetries: 0,
@@ -54,9 +64,20 @@ export type RetryOptions = {
   sleep?: (ms: number) => Promise<void>;
 };
 
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
+    const finish = () => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason ?? new Error("请求已取消"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
   });
 }
 
@@ -66,8 +87,8 @@ function defaultSleep(ms: number): Promise<void> {
  */
 export function withRetries(complete: Completer, options: RetryOptions = {}): Completer {
   const baseDelayMs = options.baseDelayMs ?? DEFAULT_RETRY_BASE_MS;
-  const sleep = options.sleep ?? defaultSleep;
   return async (config, messages, completionOptions = {}) => {
+    const sleep = options.sleep ?? ((ms: number) => defaultSleep(ms, completionOptions.signal));
     let streamed = false;
     const guarded: CompletionOptions = { ...completionOptions };
     if (completionOptions.onDelta !== undefined) {
@@ -86,10 +107,11 @@ export function withRetries(complete: Completer, options: RetryOptions = {}): Co
     }
     let attempt = 0;
     for (;;) {
+      completionOptions.signal?.throwIfAborted();
       try {
         return await complete(config, messages, guarded);
       } catch (error) {
-        if (streamed || attempt >= config.maxRetries) {
+        if (completionOptions.signal?.aborted === true || streamed || attempt >= config.maxRetries) {
           throw error;
         }
         attempt += 1;
@@ -125,12 +147,22 @@ function mapUsage(usage: unknown): TokenUsage | null {
     return null;
   }
   const details = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details : null;
+  const promptDetails = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : null;
   const reasoningRaw = details?.reasoning_tokens ?? usage.reasoning_tokens;
+  const hit = usage.prompt_cache_hit_tokens ?? promptDetails?.cached_tokens;
+  const promptTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
+  const miss = usage.prompt_cache_miss_tokens ?? (typeof hit === "number" ? promptTokens - hit : undefined);
+  // 有些兼容网关会回负数、小数或互相矛盾的缓存统计。仅保留可自洽的整数组合，
+  // 否则按未知缓存处理；原值仍完整保留在 raw.response，节点也能再次读回。
+  const validCache = typeof hit === "number" && Number.isSafeInteger(hit) && hit >= 0 && hit <= promptTokens &&
+    typeof miss === "number" && Number.isSafeInteger(miss) && miss >= 0 && miss <= promptTokens &&
+    Number.isSafeInteger(promptTokens) && hit + miss === promptTokens;
   return {
-    promptTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0,
+    promptTokens,
     completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0,
     totalTokens: typeof usage.total_tokens === "number" ? usage.total_tokens : 0,
     reasoningTokens: typeof reasoningRaw === "number" ? reasoningRaw : null,
+    ...(validCache ? { promptCacheHitTokens: hit, promptCacheMissTokens: miss } : {}),
   };
 }
 
@@ -142,12 +174,18 @@ export function buildChatRequest(
   config: ConfigSnapshot,
   messages: ChatMessage[],
   stream: boolean,
+  extras: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  validateRequestExtras(extras);
+  if (isAnthropicProvider(config) && (config.thinking !== null || config.reasoningEffort !== null)) {
+    throw new Error("Anthropic Chat 兼容接口不支持通用 thinking / reasoningEffort 控制；请使用 api messages --provider anthropic --request <原生JSON>。");
+  }
   const params: Record<string, unknown> = {
+    ...extras,
     model: config.model,
     temperature: config.temperature,
     max_tokens: config.maxTokens,
-    messages,
+    messages: extras.messages === undefined ? messages : validateApiMessages(extras.messages),
   };
   if (config.reasoningEffort !== null) {
     params.reasoning_effort = config.reasoningEffort;
@@ -159,7 +197,75 @@ export function buildChatRequest(
     params.stream = true;
     params.stream_options = { include_usage: true };
   }
+  validateOfficialToolHistory(config, params);
+  validateAnthropicChatRequest(config, params);
   return params;
+}
+
+function isOfficialDeepSeek(config: ConfigSnapshot): boolean {
+  try {
+    return new URL(config.baseURL).hostname === "api.deepseek.com";
+  } catch {
+    return false;
+  }
+}
+
+function validateOfficialToolHistory(config: ConfigSnapshot, request: Record<string, unknown>): void {
+  if (!isOfficialDeepSeek(config) || config.thinking === "disabled" || !Array.isArray(request.tools) || request.tools.length === 0) return;
+  if (!Array.isArray(request.messages)) return;
+  for (const [index, message] of request.messages.entries()) {
+    if (!isRecord(message) || message.role !== "assistant" || message.prefix === true) continue;
+    if ((typeof message.content === "string" && message.content !== "") || Array.isArray(message.tool_calls)) {
+      if (typeof message.reasoning_content !== "string" && message.reasoning_content !== null) {
+        throw new Error(`官方思考模式携带 tools 时，messages[${String(index)}] 必须完整回传 reasoning_content；请使用保存的 assistantMessage 或 --messages`);
+      }
+    }
+  }
+  if (request.tool_choice === "required" || isRecord(request.tool_choice)) {
+    throw new Error("官方思考模式不支持强制 tool_choice；请使用 --thinking disabled");
+  }
+}
+
+/** 官方前缀续写与 strict 工具调用需要 /beta；第三方网关沿用用户配置地址。 */
+export function chatRequestBaseURL(config: ConfigSnapshot, request: Record<string, unknown>): string {
+  if (!isOfficialDeepSeek(config)) return config.baseURL;
+  const messages = Array.isArray(request.messages) ? request.messages : [];
+  const last: unknown = messages[messages.length - 1];
+  const prefix = isRecord(last) && last.role === "assistant" && last.prefix === true;
+  const tools = Array.isArray(request.tools) ? request.tools : [];
+  const strict = tools.some((tool: unknown) => isRecord(tool) && isRecord(tool.function) && tool.function.strict === true);
+  return prefix || strict ? "https://api.deepseek.com/beta" : config.baseURL;
+}
+
+/** 流式工具参数是字符串增量，按 index 合并，不能用最后一个 delta 覆盖前面的 arguments。 */
+function appendToolCalls(calls: Map<number, Record<string, unknown>>, delta: unknown): void {
+  if (!isRecord(delta) || !Array.isArray(delta.tool_calls)) return;
+  for (const call of delta.tool_calls) {
+    if (!isRecord(call) || typeof call.index !== "number" || !Number.isInteger(call.index) || call.index < 0) continue;
+    const current = calls.get(call.index) ?? {};
+    if (typeof call.id === "string") current.id = call.id;
+    if (typeof call.type === "string") current.type = call.type;
+    if (isRecord(call.function)) {
+      const fn = isRecord(current.function) ? current.function : {};
+      for (const [key, value] of Object.entries(call.function)) {
+        if (typeof value === "string") fn[key] = `${typeof fn[key] === "string" ? fn[key] : ""}${value}`;
+        else fn[key] = value;
+      }
+      current.function = fn;
+    }
+    calls.set(call.index, current);
+  }
+}
+
+function assertCompletionFinished(finishReason: string | null, requestId: string | null): void {
+  let message: string | null = null;
+  if (finishReason === null) message = "模型响应未完成：缺少 finish_reason，可能在生成中途断开";
+  if (finishReason === "aborted" || finishReason === "insufficient_system_resource") {
+    message = `模型响应被中断：${finishReason}`;
+  }
+  if (message !== null) {
+    throw Object.assign(new Error(message), requestId === null ? {} : { requestID: requestId });
+  }
 }
 
 /** 按优先级找 request id：标准头之外，llmcore（one-api 系）用 `x-oneapi-request-id`。 */
@@ -214,14 +320,15 @@ export async function runCompletion(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<CompletionResult> {
-  const client = createClient(config);
   const started = Date.now();
   const stream = options.stream === true;
+  const request = buildChatRequest(config, messages, stream, options.request);
+  const client = createClient(config, chatRequestBaseURL(config, request));
+  const keepMessage = options.request?.messages !== undefined || request.tools !== undefined;
 
   if (stream) {
-    const request = buildChatRequest(config, messages, true);
     const { data: response, response: http } = await client.chat.completions
-      .create(toSdkParams(request, true))
+      .create(toSdkParams(request, true), options.signal === undefined ? {} : { signal: options.signal })
       .withResponse();
     const requestId = requestIdFromHeaders(http.headers);
 
@@ -232,6 +339,8 @@ export async function runCompletion(
     let chunkCount = 0;
     let first: Record<string, unknown> | null = null;
     let finishReason: string | null = null;
+    const toolCalls = new Map<number, Record<string, unknown>>();
+    const logprobs: Record<string, unknown[]> = {};
     for await (const chunk of response) {
       chunkCount += 1;
       if (first === null) {
@@ -239,6 +348,12 @@ export async function runCompletion(
       }
       const choice = chunk.choices[0];
       const delta = choice?.delta;
+      appendToolCalls(toolCalls, delta);
+      if (isRecord(choice?.logprobs)) {
+        for (const [key, values] of Object.entries(choice.logprobs)) {
+          if (Array.isArray(values)) logprobs[key] = [...(logprobs[key] ?? []), ...values];
+        }
+      }
       const content = readStringField(delta, ["content"]);
       if (content !== "") {
         text += content;
@@ -258,7 +373,14 @@ export async function runCompletion(
         rawUsage = chunk.usage;
       }
     }
+    assertCompletionFinished(finishReason, requestId);
     // 流式没有「完整响应对象」，按非流式的形状拼一个，方便对照。
+    const assistantMessage: Record<string, unknown> = {
+      role: "assistant",
+      content: text === "" && toolCalls.size > 0 ? null : text,
+      reasoning_content: reasoning === "" ? null : reasoning,
+      ...(toolCalls.size > 0 ? { tool_calls: [...toolCalls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call) } : {}),
+    };
     const assembled: Record<string, unknown> = {
       id: first?.id ?? null,
       object: "chat.completion",
@@ -268,12 +390,9 @@ export async function runCompletion(
       choices: [
         {
           index: 0,
-          message: {
-            role: "assistant",
-            content: text,
-            reasoning_content: reasoning === "" ? null : reasoning,
-          },
+          message: assistantMessage,
           finish_reason: finishReason,
+          ...(Object.keys(logprobs).length > 0 ? { logprobs } : {}),
         },
       ],
       usage: rawUsage,
@@ -284,6 +403,8 @@ export async function runCompletion(
       usage,
       latencyMs: Date.now() - started,
       requestId,
+      ...(typeof first?.model === "string" ? { responseModel: first.model } : {}),
+      ...(keepMessage ? { assistantMessage } : {}),
       raw: {
         request,
         response: assembled,
@@ -296,11 +417,11 @@ export async function runCompletion(
     };
   }
 
-  const request = buildChatRequest(config, messages, false);
   const { data: response, response: http } = await client.chat.completions
-    .create(toSdkParams(request, false))
+    .create(toSdkParams(request, false), options.signal === undefined ? {} : { signal: options.signal })
     .withResponse();
   const requestId = requestIdFromHeaders(http.headers);
+  assertCompletionFinished(response.choices[0]?.finish_reason ?? null, requestId);
   const message = response.choices[0]?.message;
   const text = readStringField(message, ["content"]);
   const reasoning = readStringField(message, ["reasoning_content", "reasoning", "thinking"]);
@@ -310,6 +431,8 @@ export async function runCompletion(
     usage: mapUsage(response.usage),
     latencyMs: Date.now() - started,
     requestId,
+    ...(response.model !== "" ? { responseModel: response.model } : {}),
+    ...(keepMessage && message !== undefined ? { assistantMessage: { ...message } } : {}),
     raw: {
       request,
       response,
@@ -389,46 +512,5 @@ export function serializeError(error: unknown): Record<string, unknown> {
   return out;
 }
 
-export type ProviderModel = {
-  id: string;
-  ownedBy: string | null;
-};
-
-export async function listProviderModels(config: ResolvedConfig): Promise<ProviderModel[]> {
-  const url = `${config.baseURL.replace(/\/+$/u, "")}/models`;
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      Accept: "application/json",
-    },
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`列出模型失败：HTTP ${String(response.status)} ${text.slice(0, 200)}`);
-  }
-  const body: unknown = JSON.parse(text);
-  const rows = isRecord(body) && Array.isArray(body.data) ? body.data : [];
-  const models: ProviderModel[] = [];
-  for (const row of rows) {
-    if (typeof row === "string" && row !== "") {
-      models.push({ id: row, ownedBy: null });
-      continue;
-    }
-    if (!isRecord(row)) {
-      continue;
-    }
-    const id = typeof row.id === "string" ? row.id : typeof row.name === "string" ? row.name : "";
-    if (id === "") {
-      continue;
-    }
-    const ownedBy =
-      typeof row.owned_by === "string"
-        ? row.owned_by
-        : typeof row.owner === "string"
-          ? row.owner
-          : null;
-    models.push({ id, ownedBy });
-  }
-  models.sort((a, b) => a.id.localeCompare(b.id));
-  return models;
-}
+export { listModels as listProviderModels } from "./provider-models.ts";
+export type { ProviderModel } from "./provider-models.ts";

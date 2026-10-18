@@ -1,0 +1,10 @@
+{
+  "name": "cc-ds-pro",
+  "kind": "harness",
+  "harness": "claude-code-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "protocol": "anthropic-messages"
+  }
+}

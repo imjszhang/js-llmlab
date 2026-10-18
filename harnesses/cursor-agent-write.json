@@ -1,0 +1,9 @@
+{
+  "name": "cursor-agent-write",
+  "adapter": "cursor-agent",
+  "executable": "cursor-agent",
+  "permission": "workspace-write",
+  "useHttp1ForAgent": true,
+  "nativeStallTimeoutMs": 300000,
+  "useCurrentUserHomeForLogin": true
+}

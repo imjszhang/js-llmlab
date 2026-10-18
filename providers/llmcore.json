@@ -4,5 +4,8 @@
   "apiKeyEnv": "LLMCORE_API_KEY",
   "model": "deepseek-chat",
   "temperature": 0.3,
-  "maxTokens": 4096
+  "maxTokens": 4096,
+  "endpoints": {
+    "chat-completions": "https://proxy.llm-core.cn/v1"
+  }
 }

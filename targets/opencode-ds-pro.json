@@ -1,0 +1,10 @@
+{
+  "name": "opencode-ds-pro",
+  "kind": "harness",
+  "harness": "opencode-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "protocol": "chat-completions"
+  }
+}

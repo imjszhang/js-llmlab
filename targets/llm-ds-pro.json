@@ -1,0 +1,5 @@
+{
+  "name": "llm-ds-pro",
+  "kind": "llm",
+  "config": "ds-official-pro-reason"
+}

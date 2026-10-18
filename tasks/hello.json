@@ -1,0 +1,6 @@
+{
+  "name": "hello",
+  "prompt": "Reply with exactly OK. Do not use tools or change files.",
+  "timeoutMs": 120000,
+  "checks": [{ "kind": "output-contains", "text": "OK" }]
+}

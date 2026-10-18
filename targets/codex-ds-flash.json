@@ -1,0 +1,10 @@
+{
+  "name": "codex-ds-flash",
+  "kind": "harness",
+  "harness": "codex-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "protocol": "responses"
+  }
+}

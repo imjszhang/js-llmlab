@@ -1,0 +1,9 @@
+{
+  "name": "cc-claude-sonnet",
+  "kind": "harness",
+  "harness": "claude-code-write",
+  "backend": {
+    "auth": "claude-subscription",
+    "model": "sonnet"
+  }
+}

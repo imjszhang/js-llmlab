@@ -3,5 +3,7 @@ dist
 .env
 data/sessions
 data/comparisons
+data/api
+data/benchmarks
 data/tmp/*
 !data/tmp/.gitkeep

@@ -42,3 +42,18 @@ jobs:
         run: |
           npx tsx src/cli.ts status
           npx tsx src/cli.ts compare --suite deepseek-v4-flash-effort --message smoke --dry-run
+          npx tsx src/cli.ts compare --suite deepseek-official --message smoke --json-output --dry-run
+          npx tsx src/cli.ts api responses --request '{"input":"smoke","reasoning":{"effort":"none"}}' --dry-run
+          npx tsx src/cli.ts api messages --request '{"messages":[{"role":"user","content":"smoke"}]}' --dry-run
+          npx tsx src/cli.ts api fim --request '{"prompt":"def add(a, b):","suffix":"\n"}' --dry-run
+          npx tsx src/cli.ts deepseek search smoke --dry-run
+          npx tsx src/cli.ts deepseek fetch https://example.com --dry-run
+          npx tsx src/cli.ts compare --suite claude --message smoke --dry-run
+          npx tsx src/cli.ts targets ls
+          npx tsx src/cli.ts tasks show fix-add
+          npx tsx src/cli.ts tasks validate --all
+          npx tsx src/cli.ts bench suites ls
+          npx tsx src/cli.ts bench run --suite harness-regression --dry-run
+          npx tsx src/cli.ts bench run --task hello --targets llm-ds-pro,cc-ds-pro,codex-ds-pro --dry-run
+          npx tsx src/cli.ts bench run --task hello --targets dsh-ds-pro,dsh-ds-flash,opencode-ds-pro,opencode-ds-flash --dry-run
+          npx tsx src/cli.ts api messages --provider anthropic --request '{"messages":[{"role":"user","content":"smoke"}],"thinking":{"type":"adaptive"}}' --dry-run

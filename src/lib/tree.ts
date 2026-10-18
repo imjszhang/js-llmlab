@@ -16,6 +16,7 @@ const defaultCompleter: Completer = withRetries(runCompletion);
 import { createId } from "./ids.ts";
 import { toSnapshot } from "./config.ts";
 import { computeCost } from "./cost.ts";
+import { parseSessionNode } from "./parse.ts";
 import type { LabStore } from "./store.ts";
 
 export function ancestorChain(
@@ -59,6 +60,33 @@ export function buildApiMessages(
     }
   }
   messages.push({ role: "user", content: currentUser });
+  return messages;
+}
+
+/** 从最新的完整协议记录恢复图片、工具调用和 reasoning；system 始终采用当前值。 */
+export function buildProtocolMessages(
+  systemText: string,
+  ancestors: SessionNode[],
+  currentUser: string,
+  force = false,
+): Record<string, unknown>[] | undefined {
+  let history: Record<string, unknown>[] | undefined = force ? [] : undefined;
+  for (const node of ancestors) {
+    if (node.messages.apiMessages !== undefined) {
+      history = node.messages.apiMessages.filter((message) => message.role !== "system");
+    } else if (history !== undefined) {
+      if (node.messages.user !== "") history.push({ role: "user", content: node.messages.user });
+      if (node.messages.assistant !== "") {
+        const assistant: Record<string, unknown> = { role: "assistant", content: node.messages.assistant };
+        if (node.messages.reasoning !== null) assistant.reasoning_content = node.messages.reasoning;
+        history.push(assistant);
+      }
+    }
+  }
+  if (history === undefined) return undefined;
+  const messages: Record<string, unknown>[] = [];
+  if (systemText.trim() !== "") messages.push({ role: "system", content: systemText });
+  messages.push(...history, { role: "user", content: currentUser });
   return messages;
 }
 
@@ -121,7 +149,11 @@ export async function appendTurn(params: {
   const createdAt = new Date().toISOString();
   const writeOptions = { touchSession: params.touchSession !== false };
 
-  const completion = params.completion ?? {};
+  const completion: CompletionOptions = { ...params.completion };
+  const protocolMessages = buildProtocolMessages(systemText, ancestors, userText);
+  if (protocolMessages !== undefined && completion.request?.messages === undefined) {
+    completion.request = { ...completion.request, messages: protocolMessages };
+  }
   const snapshot = toSnapshot(config);
 
   let node: SessionNode;
@@ -147,8 +179,25 @@ export async function appendTurn(params: {
       cost: computeCost(result.usage, config.pricing),
       requestId: result.requestId,
     };
+    if (result.responseModel !== undefined) node.responseModel = result.responseModel;
+    if (completion.request?.messages !== undefined || result.assistantMessage !== undefined) {
+      const sent = completion.request?.messages;
+      const history: Record<string, unknown>[] = Array.isArray(sent)
+        ? sent.filter((message): message is Record<string, unknown> =>
+            typeof message === "object" && message !== null && !Array.isArray(message))
+        : messages.map((message) => ({ ...message }));
+      // API 仅返回 prefix 后新生成的部分；历史需还原完整 assistant，raw 与成稿仍保留原响应。
+      const prefix = history.at(-1)?.prefix === true ? history.pop() : undefined;
+      const assistant: Record<string, unknown> = structuredClone(result.assistantMessage ?? {
+        role: "assistant", content: result.text, reasoning_content: result.reasoning,
+      });
+      if (typeof prefix?.content === "string" && (typeof assistant.content === "string" || assistant.content === null)) {
+        assistant.content = prefix.content + (assistant.content ?? "");
+      }
+      node.messages.apiMessages = [...history, assistant];
+    }
     raw = result.raw ?? {
-      request: buildChatRequest(snapshot, messages, completion.stream === true),
+      request: buildChatRequest(snapshot, messages, completion.stream === true, completion.request),
       response: null,
       chunkCount: null,
       requestId: result.requestId,
@@ -178,8 +227,18 @@ export async function appendTurn(params: {
       cost: null,
       requestId,
     };
+    const sent = completion.request?.messages;
+    if (Array.isArray(sent)) {
+      // 失败仍保留真实输入；下一轮续接不能把图片或工具结果降成 userText。
+      node.messages.apiMessages = sent
+        .filter((message): message is Record<string, unknown> =>
+          typeof message === "object" && message !== null && !Array.isArray(message))
+        .map((message) => structuredClone(message));
+      // 未成功的 prefix 没有产生回答，后续 user 不能排在 prefix:true 后；原请求仍在 raw 中。
+      if (node.messages.apiMessages.at(-1)?.prefix === true) node.messages.apiMessages.pop();
+    }
     raw = {
-      request: buildChatRequest(snapshot, messages, completion.stream === true),
+      request: buildChatRequest(snapshot, messages, completion.stream === true, completion.request),
       response: null,
       chunkCount: null,
       requestId,
@@ -188,6 +247,9 @@ export async function appendTurn(params: {
       error: serializeError(error),
     };
   }
+  // 高级协议消息可能回显密钥，和 raw 一样在任何节点/turn 写盘前整体打码。
+  const safeNode: unknown = JSON.parse(redactSecrets(JSON.stringify(node), [config.apiKey]));
+  node = parseSessionNode(safeNode);
   store.writeNode(sessionId, node, writeOptions);
   store.writeNodeRaw(sessionId, nodeId, raw, [config.apiKey]);
   store.writeBranch(sessionId, { ...branch, head: node.id });

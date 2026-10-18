@@ -1,0 +1,9 @@
+{
+  "name": "deepseek-official-pro-effort",
+  "configs": [
+    "ds-official-pro",
+    "ds-official-pro-reason-low",
+    "ds-official-pro-reason",
+    "ds-official-pro-reason-max"
+  ]
+}

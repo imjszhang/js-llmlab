@@ -1,0 +1,9 @@
+{
+  "name": "cursor-api-auto",
+  "kind": "harness",
+  "harness": "cursor-agent-write",
+  "backend": {
+    "auth": "cursor-api-key",
+    "model": "auto"
+  }
+}

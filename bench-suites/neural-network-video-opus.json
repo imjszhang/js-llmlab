@@ -1,0 +1,7 @@
+{
+  "name": "neural-network-video-opus",
+  "tasks": ["neural-network-video"],
+  "targets": ["cc-opus-5-5"],
+  "repeat": 1,
+  "concurrency": 1
+}

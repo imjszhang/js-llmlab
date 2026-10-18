@@ -1,0 +1,6 @@
+{
+  "name": "deepseek-harness",
+  "adapter": "deepseek-harness",
+  "executable": "dsh",
+  "permission": "read-only"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "codex",
+  "adapter": "codex",
+  "executable": "codex",
+  "permission": "read-only"
+}

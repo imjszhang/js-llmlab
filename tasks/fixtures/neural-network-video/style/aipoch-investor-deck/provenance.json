@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "savedAt": "2026-10-18",
+  "sourceDirectory": "js-designer-skill/references/aipoch-investor-deck",
+  "sourceScope": "Only files inside the user-specified directory; no upstream or sibling project was read.",
+  "referenceOnly": true,
+  "license": "not-published",
+  "adaptations": [
+    "User portrait requirement overrides original 16:9 slides; no exact aspect ratio or duration is added.",
+    "Local README/design/asset manifest replace cross-project dependencies and remove company branding, investment narrative and folio requirements.",
+    "Illustration specification and four PNG references copied byte-for-byte; images remain reference-only, never ready-made video artwork."
+  ],
+  "omitted": [
+    "content/",
+    "prompts/",
+    "slide-types.md",
+    "audit-r5-r6.md",
+    "upstream logos/fonts/documents",
+    "external presentation"
+  ],
+  "files": [
+    {
+      "file": "README.md",
+      "handling": "adapted",
+      "sourceSha256": "2f1742d045b7a96b0101e98bae7c26ab76ac49d82306d010ae72577d76330e1d",
+      "snapshotSha256": "1680c81604773e4edaa7a91f93748af2568e4eb03ae9b4decfd19c6b006c8d6f"
+    },
+    {
+      "file": "design.md",
+      "handling": "adapted",
+      "sourceSha256": "d00cc927aba7bfa4d88871922a26212729639a57ffa5a5ae339eb0a4aa4d1f0f",
+      "snapshotSha256": "40831f6825f00d946ab44569c1d2f55512456c0ba1ee607a91676b85e79866b4"
+    },
+    {
+      "file": "illustration-style.md",
+      "handling": "copied",
+      "sourceSha256": "0d1002e51b249705f2aab25425510353331be2358f1120481082092dc2b937d2",
+      "snapshotSha256": "0d1002e51b249705f2aab25425510353331be2358f1120481082092dc2b937d2"
+    },
+    {
+      "file": "assets/README.md",
+      "handling": "adapted",
+      "sourceSha256": "b37809095f9e746ea27dfb5910084d92659794c157b9789ba73cf85a6d7b02be",
+      "snapshotSha256": "25587f25734ed075c4412ca3cf31373c000e7036847ee74c76730f37ca93dd2f"
+    },
+    {
+      "file": "assets/illustration-references/r5/global-research-network.png",
+      "handling": "copied",
+      "sourceSha256": "de45ece27dca6b3b4632cbc1242d54af4578f2ccbb6013417e60a78da41ff23b",
+      "snapshotSha256": "de45ece27dca6b3b4632cbc1242d54af4578f2ccbb6013417e60a78da41ff23b"
+    },
+    {
+      "file": "assets/illustration-references/r5/research-ecosystem-ring.png",
+      "handling": "copied",
+      "sourceSha256": "2addaf94f5e0ce1bf6174d4f9adf60155770d6af0556b3e3469a8eeb8bc19761",
+      "snapshotSha256": "2addaf94f5e0ce1bf6174d4f9adf60155770d6af0556b3e3469a8eeb8bc19761"
+    },
+    {
+      "file": "assets/illustration-references/r5/three-stage-translation.png",
+      "handling": "copied",
+      "sourceSha256": "e5428dc14b019fdf06e10560f6413cf3dd0f35f2f8344c09d9f2bc16f42cc1b1",
+      "snapshotSha256": "e5428dc14b019fdf06e10560f6413cf3dd0f35f2f8344c09d9f2bc16f42cc1b1"
+    },
+    {
+      "file": "assets/illustration-references/r5/research-workflow-flywheel.png",
+      "handling": "copied",
+      "sourceSha256": "4527305dbd189de30a02971e6fc3986ccb2df0c0cd802d27cba97654989cb94a",
+      "snapshotSha256": "4527305dbd189de30a02971e6fc3986ccb2df0c0cd802d27cba97654989cb94a"
+    }
+  ]
+}

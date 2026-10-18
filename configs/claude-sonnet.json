@@ -1,0 +1,7 @@
+{
+  "name": "claude-sonnet",
+  "provider": "anthropic",
+  "model": "claude-sonnet-5-5",
+  "temperature": 1,
+  "maxTokens": 4096
+}

@@ -6,6 +6,7 @@ import type {
   DryRunEntry,
   JudgeVerdict,
   SessionNode,
+  TokenUsage,
   VariantRun,
   VariantScore,
 } from "../types.ts";
@@ -20,6 +21,15 @@ export function renderDryRun(entries: DryRunEntry[]): string {
 
 function yamlQuote(value: string): string {
   return JSON.stringify(value);
+}
+
+function appendCacheUsage(lines: string[], usage: TokenUsage): void {
+  if (usage.promptCacheHitTokens !== undefined) {
+    lines.push(`- promptCacheHitTokens: ${String(usage.promptCacheHitTokens)}`);
+  }
+  if (usage.promptCacheMissTokens !== undefined) {
+    lines.push(`- promptCacheMissTokens: ${String(usage.promptCacheMissTokens)}`);
+  }
 }
 
 export function renderTurn(node: SessionNode): string {
@@ -42,6 +52,9 @@ export function renderTurn(node: SessionNode): string {
     `- error: ${node.error ?? "null"}`,
     `- requestId: ${node.requestId ?? "null"}`,
   ];
+  if (node.responseModel !== undefined) {
+    lines.push(`- responseModel: ${node.responseModel}`);
+  }
   if (node.usage !== null) {
     lines.push(
       `- promptTokens: ${String(node.usage.promptTokens)}`,
@@ -51,6 +64,7 @@ export function renderTurn(node: SessionNode): string {
     if (node.usage.reasoningTokens !== null) {
       lines.push(`- reasoningTokens: ${String(node.usage.reasoningTokens)}`);
     }
+    appendCacheUsage(lines, node.usage);
   }
   if (node.cost !== null) {
     lines.push(`- cost: ${formatCost(node.cost)}`);
@@ -334,7 +348,7 @@ export function renderComparisonReport(
 }
 
 function variantHeader(title: string, variant: ComparisonVariant): string[] {
-  return [
+  const lines = [
     `# ${title} ${variant.configName}`,
     "",
     `- provider: ${variant.config.provider ?? "null"}`,
@@ -345,8 +359,12 @@ function variantHeader(title: string, variant: ComparisonVariant): string[] {
     `- latencyMs: ${String(variant.latencyMs)}`,
     `- error: ${variant.error ?? "null"}`,
     `- nodeId: ${variant.nodeId ?? "null"}`,
-    "",
   ];
+  if (variant.responseModel !== undefined) {
+    lines.push(`- responseModel: ${variant.responseModel}`);
+  }
+  lines.push("");
+  return lines;
 }
 
 /** `variants/<name>/output.md`：只有成稿。 */
@@ -373,6 +391,9 @@ export function renderVariantRun(variant: ComparisonVariant, run: VariantRun, k:
     `- nodeId: ${run.nodeId ?? "null"}`,
     `- requestId: ${run.requestId ?? "null"}`,
   ];
+  if (run.responseModel !== undefined) {
+    lines.push(`- responseModel: ${run.responseModel}`);
+  }
   if (run.usage !== null) {
     lines.push(
       `- promptTokens: ${String(run.usage.promptTokens)}`,
@@ -382,6 +403,7 @@ export function renderVariantRun(variant: ComparisonVariant, run: VariantRun, k:
     if (run.usage.reasoningTokens !== null) {
       lines.push(`- reasoningTokens: ${String(run.usage.reasoningTokens)}`);
     }
+    appendCacheUsage(lines, run.usage);
   }
   if (run.cost !== null) {
     lines.push(`- cost: ${formatCost(run.cost)}`);

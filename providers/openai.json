@@ -4,5 +4,9 @@
   "apiKeyEnv": "OPENAI_API_KEY",
   "model": "gpt-4o",
   "temperature": 0.3,
-  "maxTokens": 4096
+  "maxTokens": 4096,
+  "endpoints": {
+    "chat-completions": "https://api.openai.com/v1",
+    "responses": "https://api.openai.com/v1"
+  }
 }

@@ -1,0 +1,8 @@
+{
+  "name": "claude",
+  "configs": [
+    "claude-sonnet",
+    "claude-opus",
+    "claude-haiku"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "claude-code-write",
+  "adapter": "claude-code",
+  "executable": "claude",
+  "permission": "workspace-write"
+}

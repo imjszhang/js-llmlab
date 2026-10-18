@@ -11,6 +11,8 @@ import { runCompareScore, type ScoreCliOptions } from "./commands/score.ts";
 import { runSessionLs, runSessionShow } from "./commands/session.ts";
 import { runCompareLs, runCompareShow, runNodeShow } from "./commands/show.ts";
 import { runStatus } from "./commands/status.ts";
+import { registerOfficialCommands } from "./commands/official.ts";
+import { registerBenchCommands } from "./commands/bench.ts";
 import { readPackageVersion } from "./lib/version.ts";
 import type { SharedCliOptions } from "./types.ts";
 
@@ -29,6 +31,17 @@ function addSharedOptions(command: Command): Command {
     .option("--reasoning-effort <level>", "low、high 或 max")
     .option("--timeout-ms <n>", "单次请求超时毫秒，缺省 600000")
     .option("--max-retries <n>", "失败重试次数，缺省 2");
+}
+
+function addRequestOptions(command: Command): Command {
+  return command
+    .option("--image <sources...>", "图片：本地路径、公开 URL 或 data URL")
+    .option("--file-id <ids...>", "Files API 已上传的图片 id")
+    .option("--json-output", "请求 JSON 对象输出")
+    .option("--tools <file>", "工具声明 JSON 数组文件（工具由调用方执行）")
+    .option("--messages <file>", "完整协议消息 JSON 数组，含工具调用与结果")
+    .option("--prefix <text>", "assistant 前缀续写（官方走 beta）")
+    .option("--request <file>", "附加请求参数 JSON，不能覆盖配置与流式设置");
 }
 
 type StringOptionKey = {
@@ -63,6 +76,13 @@ function toShared(options: Record<string, unknown>): SharedCliOptions {
   assign("from", options.from);
   assign("concurrency", options.concurrency);
   assign("repeat", options.repeat);
+  assign("tools", options.tools);
+  assign("messages", options.messages);
+  assign("prefix", options.prefix);
+  assign("request", options.request);
+  if (Array.isArray(options.image)) shared.image = options.image.filter((value): value is string => typeof value === "string");
+  if (Array.isArray(options.fileId)) shared.fileId = options.fileId.filter((value): value is string => typeof value === "string");
+  if (typeof options.jsonOutput === "boolean") shared.jsonOutput = options.jsonOutput;
   if (typeof options.dryRun === "boolean") {
     shared.dryRun = options.dryRun;
   }
@@ -79,7 +99,7 @@ async function main(): Promise<void> {
   const program = new Command();
   program
     .name("js-llmlab")
-    .description("OpenAI 兼容接口的本地提示词实验 CLI")
+    .description("本地 LLM 对比与 harness 任务实验 CLI")
     .version(readPackageVersion());
 
   program.command("status").description("查看环境、配置和预设").action(() => {
@@ -124,7 +144,7 @@ async function main(): Promise<void> {
     },
   );
 
-  addSharedOptions(
+  addRequestOptions(addSharedOptions(
     program
       .command("run")
       .description("非交互跑一轮")
@@ -133,7 +153,7 @@ async function main(): Promise<void> {
       .option("--stream", "流式打印成稿；思维链变暗打到 stderr")
       .option("--hide-reasoning", "流式时不打思维链")
       .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
-  ).action(async (options: Record<string, unknown>) => {
+  )).action(async (options: Record<string, unknown>) => {
     await runOnce(toShared(options));
   });
 
@@ -179,7 +199,7 @@ async function main(): Promise<void> {
       runBranchCreate(args);
     });
 
-  const compare = addSharedOptions(
+  const compare = addRequestOptions(addSharedOptions(
     program
       .command("compare")
       .description("同一输入、多配置或多模型对比；子命令 score 对已有对比打分")
@@ -192,7 +212,7 @@ async function main(): Promise<void> {
       .option("--concurrency <n>", "并发路数，缺省 3")
       .option("--repeat <n>", "每路重复采样次数，缺省 1；> 1 时汇总表显示 均值 (最小–最大)")
       .option("--dry-run", "只打印解析后的配置与请求体，不发请求、不落盘"),
-  ).action(async (options: Record<string, unknown>) => {
+  )).action(async (options: Record<string, unknown>) => {
     await runCompare(toShared(options));
   });
 
@@ -247,6 +267,8 @@ async function main(): Promise<void> {
       await runCompareRetry(comparison, retryOptions);
     });
 
+  registerOfficialCommands(program);
+  registerBenchCommands(program);
   await program.parseAsync(process.argv);
 }
 

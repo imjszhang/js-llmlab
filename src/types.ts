@@ -1,9 +1,13 @@
 export type ThinkingMode = "enabled" | "disabled";
 export type ReasoningEffort = "low" | "high" | "max";
+export type ApiProtocol = "chat-completions" | "anthropic-messages" | "responses";
+export type ProviderEndpoints = Partial<Record<ApiProtocol, string>>;
 
 /** 每百万 token 的价格。推理 token 已含在 completion_tokens 里，按 output 计。 */
 export type Pricing = {
   inputPerMillion: number;
+  /** 缓存命中输入价格；未配时仍用统一输入价。 */
+  cachedInputPerMillion?: number;
   outputPerMillion: number;
   currency: string;
 };
@@ -37,6 +41,7 @@ export type NamedConfigFile = {
   name?: string;
   provider?: string;
   baseURL?: string;
+  endpoints?: ProviderEndpoints;
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -81,6 +86,8 @@ export type TokenUsage = {
   completionTokens: number;
   totalTokens: number;
   reasoningTokens: number | null;
+  promptCacheHitTokens?: number;
+  promptCacheMissTokens?: number;
 };
 
 export type NodeMessages = {
@@ -88,6 +95,8 @@ export type NodeMessages = {
   user: string;
   assistant: string;
   reasoning: string | null;
+  /** 高级调用的完整协议消息（本轮请求 + assistant），用于无损续接。 */
+  apiMessages?: Record<string, unknown>[];
 };
 
 export type SessionNode = {
@@ -104,6 +113,8 @@ export type SessionNode = {
   cost: Cost | null;
   /** 网关响应头 `x-request-id`；没返回或老节点为 null。 */
   requestId: string | null;
+  /** 网关实际响应的 model 字段；不等同于保证固定的模型版本。 */
+  responseModel?: string;
 };
 
 /**
@@ -151,6 +162,8 @@ export type ComparisonSpec = {
   fromNodeId: string | null;
   /** `--repeat n`（n > 1）时记录；单次采样没有这个 key。 */
   repeat?: number;
+  /** 高级请求扩展的已解析快照，补跑不重新读取本地附件或请求文件。 */
+  request?: Record<string, unknown>;
 };
 
 /** 一路里的一次采样。单次采样时这一路本身就是唯一的 run。 */
@@ -163,6 +176,7 @@ export type VariantRun = {
   error: string | null;
   cost: Cost | null;
   requestId: string | null;
+  responseModel?: string;
 };
 
 /**
@@ -257,6 +271,13 @@ export type SharedCliOptions = {
   concurrency?: string;
   /** compare 每路重复采样次数，缺省 1。 */
   repeat?: string;
+  image?: string[];
+  fileId?: string[];
+  jsonOutput?: boolean;
+  tools?: string;
+  messages?: string;
+  prefix?: string;
+  request?: string;
 };
 
 /** `--dry-run` 的一路输出：配置快照、密钥状态、消息与将发送的请求体。 */

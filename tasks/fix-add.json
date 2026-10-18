@@ -1,0 +1,14 @@
+{
+  "name": "fix-add",
+  "prompt": "Fix the add(a, b) function in add.mjs so it returns the sum of its arguments. Keep the named export. Edit the file, then verify your fix. Do not add dependencies.",
+  "fixture": "tasks/fixtures/fix-add",
+  "timeoutMs": 120000,
+  "checks": [
+    { "kind": "file-exists", "path": "add.mjs" },
+    {
+      "kind": "command",
+      "argv": ["node", "--input-type=module", "-e", "import assert from 'node:assert/strict'; import { add } from './add.mjs'; assert.equal(add(2, 3), 5); assert.equal(add(-2, 1), -1); assert.equal(add(0, 0), 0);"],
+      "timeoutMs": 10000
+    }
+  ]
+}

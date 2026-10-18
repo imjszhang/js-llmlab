@@ -6,6 +6,7 @@ import type {
   SharedCliOptions,
 } from "../types.ts";
 import { buildChatRequest } from "../lib/client.ts";
+import { prepareChatRequest } from "../lib/chat-options.ts";
 import {
   collectConfigRefs,
   compareOverridesFromCli,
@@ -26,7 +27,7 @@ import {
 } from "../lib/render.ts";
 import { parseRepeat, runFromNode, variantFromRuns } from "../lib/runs.ts";
 import { LabStore } from "../lib/store.ts";
-import { ancestorChain, appendTurn, buildApiMessages, forkBranch } from "../lib/tree.ts";
+import { ancestorChain, appendTurn, buildApiMessages, buildProtocolMessages, forkBranch } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
 
 export async function runCompare(options: SharedCliOptions, deps?: CommandDeps): Promise<void> {
@@ -50,7 +51,7 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   const systemName = options.system ?? "default";
   const userName = options.user ?? null;
   const input = readMessageInput(options.message, options.input);
-  const userText = resolveUserText({
+  const userText = input.trim() === "" && options.messages !== undefined && userName === null ? "" : resolveUserText({
     root,
     userPreset: userName,
     input,
@@ -59,16 +60,16 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   const systemText = resolveSystemText(root, systemName);
   const concurrency = parseConcurrency(options.concurrency);
   const repeat = parseRepeat(options.repeat);
+  const priorSession = options.session;
+  const priorNode = options.from ?? null;
+  const ancestors = priorSession !== undefined && priorNode !== null && store.sessionExists(priorSession)
+    ? ancestorChain(store, priorSession, priorNode) : [];
+  const messages = buildApiMessages(systemText, ancestors, userText);
+  const request = await prepareChatRequest(messages, options, buildProtocolMessages(systemText, ancestors, userText,
+    options.tools !== undefined || options.request !== undefined));
 
   if (options.dryRun === true) {
     // 不要 key、不建会话、不写 data/。带 --session/--from 时只读祖先链。
-    const sessionId = options.session;
-    const fromNodeId = options.from ?? null;
-    const ancestors =
-      sessionId !== undefined && fromNodeId !== null && store.sessionExists(sessionId)
-        ? ancestorChain(store, sessionId, fromNodeId)
-        : [];
-    const messages = buildApiMessages(systemText, ancestors, userText);
     const entries: DryRunEntry[] = refs.map((ref) => {
       const peeked = peekConfigRef(root, ref, overrides);
       return {
@@ -77,13 +78,15 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
         apiKeyEnv: peeked.apiKeyEnv,
         apiKeyPresent: peeked.apiKeyPresent,
         messages,
-        request: buildChatRequest(peeked.snapshot, messages, false),
+        request: buildChatRequest(peeked.snapshot, messages, false, request),
       };
     });
     log(renderDryRun(entries));
     return;
   }
 
+  const resolvedConfigs = refs.map((ref) => ({ ref, config: resolveConfigRef(root, ref, overrides) }));
+  for (const { config } of resolvedConfigs) buildChatRequest(config, messages, false, request);
   store.ensureLayout();
   let sessionId = options.session;
   if (sessionId === undefined) {
@@ -115,10 +118,10 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
   if (repeat > 1) {
     spec.repeat = repeat;
   }
+  if (Object.keys(request).length > 0) spec.request = request;
 
   // 先把每路的配置与分支准备好（同步、按输入顺序），再并发发请求。
-  const tasks = refs.map((ref) => {
-    const config = resolveConfigRef(root, ref, overrides);
+  const tasks = resolvedConfigs.map(({ ref, config }) => {
     const branchName = safeVariantName(ref);
     if (!store.branchExists(sessionId, branchName)) {
       forkBranch(store, sessionId, branchName, fromNodeId);
@@ -155,6 +158,7 @@ export async function runCompare(options: SharedCliOptions, deps?: CommandDeps):
       systemPreset: systemName,
       userPreset: userName,
       userText,
+      completion: Object.keys(request).length > 0 ? { request } : {},
       complete,
       touchSession: false,
     });
