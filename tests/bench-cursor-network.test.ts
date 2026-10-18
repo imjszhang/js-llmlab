@@ -11,7 +11,9 @@ import { makeCommandLab, writeJson } from "./helpers.ts";
 test("Cursor transport choice survives resolution into native config without changing permissions", () => {
   const { root } = makeCommandLab();
   const profile = { name: "cursor", adapter: "cursor-agent", executable: "cursor-agent", permission: "workspace-write" };
-  writeJson(path.join(root, "targets/cursor.json"), { name: "cursor", kind: "harness", harness: "cursor", backend: { auth: "cursor-login", model: "claude-opus-5-5-high" } });
+  // Transport planning is platform-independent; native Keychain login is not.
+  // This only builds a plan and never reads a key or starts Cursor.
+  writeJson(path.join(root, "targets/cursor.json"), { name: "cursor", kind: "harness", harness: "cursor", backend: { auth: "cursor-api-key", model: "claude-opus-5-5-high" } });
   for (const choice of [undefined, false, true]) {
     writeJson(path.join(root, "harnesses/cursor.json"), { ...profile, ...(choice === undefined ? {} : { useHttp1ForAgent: choice }) });
     const target = resolveTarget(root, "cursor");
