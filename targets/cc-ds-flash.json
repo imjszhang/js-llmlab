@@ -1,0 +1,10 @@
+{
+  "name": "cc-ds-flash",
+  "kind": "harness",
+  "harness": "claude-code-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "protocol": "anthropic-messages"
+  }
+}

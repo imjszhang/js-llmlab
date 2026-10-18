@@ -1,0 +1,9 @@
+{
+  "name": "cursor-agent",
+  "adapter": "cursor-agent",
+  "executable": "cursor-agent",
+  "permission": "read-only",
+  "useHttp1ForAgent": true,
+  "nativeStallTimeoutMs": 300000,
+  "useCurrentUserHomeForLogin": true
+}

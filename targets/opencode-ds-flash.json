@@ -1,0 +1,10 @@
+{
+  "name": "opencode-ds-flash",
+  "kind": "harness",
+  "harness": "opencode-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "protocol": "chat-completions"
+  }
+}

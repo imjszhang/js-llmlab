@@ -1,0 +1,6 @@
+{
+  "name": "opencode",
+  "adapter": "opencode",
+  "executable": "opencode",
+  "permission": "read-only"
+}

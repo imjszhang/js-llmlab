@@ -19,6 +19,8 @@ export type FakeReply = {
   requestId?: string | null;
   /** 抛错时附带的 HTTP 状态（模拟 SDK APIError 的 status 字段）。 */
   status?: number;
+  responseModel?: string;
+  assistantMessage?: Record<string, unknown>;
 };
 
 export type FakeCall = {
@@ -114,7 +116,7 @@ export function createFakeCompleter(
     }
 
     const requestId = rule.requestId ?? null;
-    const request = buildChatRequest(config, messages, options.stream === true);
+    const request = buildChatRequest(config, messages, options.stream === true, options.request);
     const result: CompletionResult = {
       text,
       reasoning,
@@ -137,6 +139,8 @@ export function createFakeCompleter(
         error: null,
       },
     };
+    if (rule.responseModel !== undefined) result.responseModel = rule.responseModel;
+    if (rule.assistantMessage !== undefined) result.assistantMessage = structuredClone(rule.assistantMessage);
     return result;
   };
 

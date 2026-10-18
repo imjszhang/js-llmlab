@@ -47,7 +47,7 @@ export function parseUsage(raw: unknown): TokenUsage | null {
   if (!isRecord(raw)) {
     throw new Error("usage 格式无效");
   }
-  return {
+  const usage: TokenUsage = {
     promptTokens: Number(raw.promptTokens),
     completionTokens: Number(raw.completionTokens),
     totalTokens: Number(raw.totalTokens),
@@ -56,6 +56,23 @@ export function parseUsage(raw: unknown): TokenUsage | null {
         ? null
         : Number(raw.reasoningTokens),
   };
+  for (const field of ["promptCacheHitTokens", "promptCacheMissTokens"] as const) {
+    const value = raw[field];
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > usage.promptTokens) {
+      throw new Error(`usage.${field} 必须是 0 至 promptTokens 的整数`);
+    }
+    usage[field] = value;
+  }
+  if (
+    usage.promptCacheHitTokens !== undefined && usage.promptCacheMissTokens !== undefined &&
+    usage.promptCacheHitTokens + usage.promptCacheMissTokens > usage.promptTokens
+  ) {
+    throw new Error("usage 缓存命中与未命中 token 总和不能超过 promptTokens");
+  }
+  return usage;
 }
 
 export function parsePricingRecord(raw: unknown): Pricing | undefined {
@@ -67,11 +84,19 @@ export function parsePricingRecord(raw: unknown): Pricing | undefined {
   if (inputPerMillion === null || outputPerMillion === null) {
     return undefined;
   }
-  return {
+  const pricing: Pricing = {
     inputPerMillion,
     outputPerMillion,
     currency: typeof raw.currency === "string" ? raw.currency : "CNY",
   };
+  if (raw.cachedInputPerMillion !== undefined && raw.cachedInputPerMillion !== null) {
+    const cachedInputPerMillion = nullableNumber(raw.cachedInputPerMillion);
+    if (cachedInputPerMillion === null || cachedInputPerMillion < 0) {
+      throw new Error("pricing.cachedInputPerMillion 必须是 ≥ 0 的有限数字");
+    }
+    pricing.cachedInputPerMillion = cachedInputPerMillion;
+  }
+  return pricing;
 }
 
 /** 老节点没有 cost 字段 → null。 */
@@ -124,7 +149,7 @@ export function parseSessionNode(raw: unknown): SessionNode {
   if (!isRecord(raw) || !isRecord(raw.messages)) {
     throw new Error("node JSON 格式无效");
   }
-  return {
+  const node: SessionNode = {
     id: requireString(raw.id, "id"),
     parentId: requireNullableString(raw.parentId, "parentId"),
     createdAt: requireString(raw.createdAt, "createdAt"),
@@ -143,6 +168,21 @@ export function parseSessionNode(raw: unknown): SessionNode {
     cost: parseCost(raw.cost),
     requestId: requireNullableString(raw.requestId, "requestId"),
   };
+  if (raw.responseModel !== undefined && raw.responseModel !== null) {
+    node.responseModel = requireString(raw.responseModel, "responseModel");
+  }
+  if (raw.messages.apiMessages !== undefined) {
+    if (!Array.isArray(raw.messages.apiMessages)) {
+      throw new Error("messages.apiMessages 必须是对象数组");
+    }
+    node.messages.apiMessages = raw.messages.apiMessages.map((message, index) => {
+      if (!isRecord(message)) {
+        throw new Error(`messages.apiMessages[${String(index)}] 必须是对象`);
+      }
+      return message;
+    });
+  }
+  return node;
 }
 
 export function parseComparisonSpec(raw: unknown): ComparisonSpec {
@@ -163,6 +203,12 @@ export function parseComparisonSpec(raw: unknown): ComparisonSpec {
   if (repeat !== null && repeat > 1) {
     spec.repeat = repeat;
   }
+  if (raw.request !== undefined) {
+    if (!isRecord(raw.request)) {
+      throw new Error("spec.request 必须是对象");
+    }
+    spec.request = raw.request;
+  }
   return spec;
 }
 
@@ -171,7 +217,7 @@ export function parseVariantRun(raw: unknown, field = "run"): VariantRun {
   if (!isRecord(raw)) {
     throw new Error(`${field} 格式无效`);
   }
-  return {
+  const run: VariantRun = {
     nodeId: requireNullableString(raw.nodeId, `${field}.nodeId`),
     assistant: typeof raw.assistant === "string" ? raw.assistant : "",
     reasoning: requireNullableString(raw.reasoning, `${field}.reasoning`),
@@ -181,6 +227,10 @@ export function parseVariantRun(raw: unknown, field = "run"): VariantRun {
     cost: parseCost(raw.cost),
     requestId: requireNullableString(raw.requestId, `${field}.requestId`),
   };
+  if (raw.responseModel !== undefined && raw.responseModel !== null) {
+    run.responseModel = requireString(raw.responseModel, `${field}.responseModel`);
+  }
+  return run;
 }
 
 export function parseJudgeVerdict(raw: unknown): JudgeVerdict {

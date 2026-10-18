@@ -1,0 +1,6 @@
+{
+  "name": "claude-code",
+  "adapter": "claude-code",
+  "executable": "claude",
+  "permission": "read-only"
+}

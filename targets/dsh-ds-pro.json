@@ -1,0 +1,10 @@
+{
+  "name": "dsh-ds-pro",
+  "kind": "harness",
+  "harness": "deepseek-harness-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "protocol": "anthropic-messages"
+  }
+}

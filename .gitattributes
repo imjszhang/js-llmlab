@@ -1,0 +1,3 @@
+# Task checker hashes cover exact fixture bytes, including deliberately CRLF CSV.
+tasks/fixtures/** -text
+tasks/checks/*.mjs text eol=lf

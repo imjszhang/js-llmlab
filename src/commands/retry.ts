@@ -113,6 +113,7 @@ export async function runCompareRetry(
       systemPreset: spec.systemPreset,
       userPreset: spec.userPreset,
       userText: spec.input,
+      completion: spec.request !== undefined ? { request: spec.request } : {},
       complete,
       touchSession: false,
     });

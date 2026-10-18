@@ -1,0 +1,6 @@
+{
+  "name": "codex-write",
+  "adapter": "codex",
+  "executable": "codex",
+  "permission": "workspace-write"
+}

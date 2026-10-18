@@ -1,0 +1,6 @@
+{
+  "name": "opencode-write",
+  "adapter": "opencode",
+  "executable": "opencode",
+  "permission": "workspace-write"
+}

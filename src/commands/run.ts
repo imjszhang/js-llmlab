@@ -1,11 +1,12 @@
 import chalk from "chalk";
 import type { DryRunEntry, SharedCliOptions } from "../types.ts";
 import { buildChatRequest, type CompletionOptions } from "../lib/client.ts";
+import { prepareChatRequest } from "../lib/chat-options.ts";
 import { loadEnv, overridesFromCli, peekConfigRef, resolveConfigRef } from "../lib/config.ts";
 import { readMessageInput, resolveSystemText, resolveUserText } from "../lib/presets.ts";
 import { renderDryRun, truncateTitle } from "../lib/render.ts";
 import { LabStore } from "../lib/store.ts";
-import { ancestorChain, appendTurn, buildApiMessages } from "../lib/tree.ts";
+import { ancestorChain, appendTurn, buildApiMessages, buildProtocolMessages } from "../lib/tree.ts";
 import { resolveDeps, type CommandDeps } from "./deps.ts";
 
 /**
@@ -41,7 +42,7 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
   const systemName = options.system ?? "default";
   const userName = options.user ?? null;
   const input = readMessageInput(options.message, options.input);
-  const userText = resolveUserText({
+  const userText = input.trim() === "" && options.messages !== undefined && userName === null ? "" : resolveUserText({
     root,
     userPreset: userName,
     input,
@@ -50,30 +51,33 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
   const systemText = resolveSystemText(root, systemName);
   const branchName = options.branch ?? "main";
 
+  const existingSession = options.session;
+  const parentId = existingSession !== undefined && store.sessionExists(existingSession) && store.branchExists(existingSession, branchName)
+    ? store.getBranch(existingSession, branchName).head : null;
+  const ancestors = existingSession !== undefined && parentId !== null ? ancestorChain(store, existingSession, parentId) : [];
+  const messages = buildApiMessages(systemText, ancestors, userText);
+  const request = await prepareChatRequest(messages, options, buildProtocolMessages(systemText, ancestors, userText,
+    options.tools !== undefined || options.request !== undefined));
+
   if (options.dryRun === true) {
     // 不要 key、不建会话、不写 data/。已有会话时只读祖先链。
     const peeked = peekConfigRef(root, configName, overrides);
-    const sessionId = options.session;
-    const parentId =
-      sessionId !== undefined && store.sessionExists(sessionId) && store.branchExists(sessionId, branchName)
-        ? store.getBranch(sessionId, branchName).head
-        : null;
-    const ancestors = sessionId !== undefined && parentId !== null ? ancestorChain(store, sessionId, parentId) : [];
-    const messages = buildApiMessages(systemText, ancestors, userText);
     const entry: DryRunEntry = {
       ref: configName,
       config: peeked.snapshot,
       apiKeyEnv: peeked.apiKeyEnv,
       apiKeyPresent: peeked.apiKeyPresent,
       messages,
-      request: buildChatRequest(peeked.snapshot, messages, false),
+      request: buildChatRequest(peeked.snapshot, messages, options.stream === true, request),
     };
     log(renderDryRun([entry]));
     return;
   }
 
-  store.ensureLayout();
   const config = resolveConfigRef(root, configName, overrides);
+  // 先验证协议请求，避免参数错误留下空会话。
+  buildChatRequest(config, messages, options.stream === true, request);
+  store.ensureLayout();
 
   let sessionId = options.session;
   if (sessionId === undefined) {
@@ -121,6 +125,7 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
         },
       }
     : {};
+  if (Object.keys(request).length > 0) completion.request = request;
 
   const stopProgress = startProgress({
     enabled: !stream && isTTY,
@@ -163,6 +168,9 @@ export async function runOnce(options: SharedCliOptions, deps?: CommandDeps): Pr
     }
   } else {
     log(node.messages.assistant);
+  }
+  if (node.messages.apiMessages?.at(-1)?.tool_calls !== undefined) {
+    error(chalk.dim(`模型请求调用工具；完整 assistant 消息已写入节点 ${node.id} 的 messages.apiMessages（用 --messages 续接结果）。`));
   }
   error(chalk.dim(`session=${sessionId} branch=${branchName} node=${node.id} ${String(node.latencyMs)}ms`));
 }

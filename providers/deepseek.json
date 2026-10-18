@@ -4,5 +4,10 @@
   "apiKeyEnv": "DEEPSEEK_API_KEY",
   "model": "deepseek-flash",
   "temperature": 0.3,
-  "maxTokens": 4096
+  "maxTokens": 4096,
+  "endpoints": {
+    "chat-completions": "https://api.deepseek.com",
+    "anthropic-messages": "https://api.deepseek.com/anthropic",
+    "responses": "https://api.deepseek.com/v1"
+  }
 }

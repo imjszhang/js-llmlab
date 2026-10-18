@@ -1,0 +1,10 @@
+{
+  "name": "codex-ds-pro",
+  "kind": "harness",
+  "harness": "codex-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "protocol": "responses"
+  }
+}

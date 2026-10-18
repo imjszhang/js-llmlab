@@ -13,7 +13,7 @@ export function parseRepeat(value: string | undefined): number {
 }
 
 export function runFromNode(node: SessionNode): VariantRun {
-  return {
+  const run: VariantRun = {
     nodeId: node.id,
     assistant: node.messages.assistant,
     reasoning: node.messages.reasoning,
@@ -23,6 +23,10 @@ export function runFromNode(node: SessionNode): VariantRun {
     cost: node.cost,
     requestId: node.requestId,
   };
+  if (node.responseModel !== undefined) {
+    run.responseModel = node.responseModel;
+  }
+  return run;
 }
 
 /** 一路的全部采样：有 `runs` 用它，否则这一路自己就是唯一的 run。 */
@@ -30,18 +34,20 @@ export function variantRuns(variant: ComparisonVariant): VariantRun[] {
   if (variant.runs !== undefined && variant.runs.length > 0) {
     return variant.runs;
   }
-  return [
-    {
-      nodeId: variant.nodeId,
-      assistant: variant.assistant,
-      reasoning: variant.reasoning,
-      usage: variant.usage,
-      latencyMs: variant.latencyMs,
-      error: variant.error,
-      cost: variant.cost,
-      requestId: variant.requestId,
-    },
-  ];
+  const run: VariantRun = {
+    nodeId: variant.nodeId,
+    assistant: variant.assistant,
+    reasoning: variant.reasoning,
+    usage: variant.usage,
+    latencyMs: variant.latencyMs,
+    error: variant.error,
+    cost: variant.cost,
+    requestId: variant.requestId,
+  };
+  if (variant.responseModel !== undefined) {
+    run.responseModel = variant.responseModel;
+  }
+  return [run];
 }
 
 /**

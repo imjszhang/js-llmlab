@@ -1,0 +1,7 @@
+{
+  "name": "harness-regression",
+  "tasks": ["fix-order-total", "normalize-orders"],
+  "targets": ["cc-ds-flash", "codex-ds-flash", "dsh-ds-flash", "opencode-ds-flash"],
+  "repeat": 3,
+  "concurrency": 3
+}

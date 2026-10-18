@@ -4,12 +4,29 @@
 
 ## [Unreleased]
 
+- 集成同步官方 API、任务实验框架、五种 harness、原生账号模式及后续代理/视频任务改动，保留各功能 issue 的独立验收记录，不包含本地实验产物（#50）。
+
+- fix(cursor): 修复原图慢传输触发原生 30 秒重连的问题，增加版本与 SHA-256 锁定的内存兼容修复、可快照的内部等待时间和 HTTP/1.1 配置；修正入口被工具 shell 拦截、保留标准代理，并补离线回归（#49）。
+
 ### Added
 
+- 新增 Cursor Agent 独立 adapter、只读/可写 profiles 与原生登录/API key targets，支持模型选择及安全状态/动态目录查询；隔离本地配置、启用原生沙箱，保留远端扩展边界，完整用量与费用保持未知，不新增 LLM provider（#47）。
+- Claude Code target 支持原生 Claude 订阅登录与显式模型选择，新增安全登录状态查询、Sonnet / Opus 别名 targets 和通用 targets init；冻结认证目录命名空间，订阅费用保持未知，兼容 API targets 与旧记录（#44）。
+- 神经网络竖屏科普视频的单次生成任务、原始短提示与独立样式快照，新增 Claude Code + Opus 5.5 的单样本套件、可信视频技术验收与人工评分说明，不预设创作框架（#43）。
+- Codex target 支持当前 ChatGPT 订阅登录、显式模型/推理强度与原生模型目录查询，新增 targets init；保留 API provider 与旧记录兼容，订阅费用独立标识为未知，增加认证隔离、超时清理与离线回归覆盖（#42）。
+- 任务模板与离线自检 `tasks init/validate`、单一源可信 checker 与文件约束；新增多任务实验套件、整组冻结和全局交错调度，以及兼容旧记录的 Markdown/JSON/CSV 汇总与显式价格文件重算，旧任务和 schemaVersion=1 单题记录继续可用（#41）。
+- 新增 DeepSeek Harness / OpenCode V2 两种独立 adapter、四套只读/可写 profiles 及官方 DeepSeek Pro/Flash 四个 targets；显式 Messages/Chat Completions 协议、隔离配置与凭证清理、非交互终态验证、缓存/推理用量归一化与离线测试，未知费用和响应模型保持 null（#40）。
+- 多文件修复 `fix-order-total` 与数据整理 `normalize-orders` 任务、明确规格/fixtures、独立验收与反例测试；新增 DeepSeek 官方 Flash 的 Claude Code / Codex targets，支持与 Pro 同任务重复对照（#39）。
+- 独立 targets / tasks / harness profiles 与统一执行层，新增 `bench run/ls/show`、配置查询及无密钥 dry-run；接入 Claude Code / Codex，显式协议与 provider 组合，冻结 fixture、独立采样工作区、超时进程回收、命令验收与原始记录/报告；LLM 保留原调用路径（#38）。
+- Anthropic 官方 provider 与 Claude Sonnet / Opus / Haiku 5.5 配置、`claude` suite：支持普通/流式对话与多配置对比，校验兼容层无效参数；原生 Messages 正确路由、模型列表原生鉴权与分页；同步密钥示例、文档和离线测试（#37）。
+- DeepSeek 官方能力接入：Flash / Pro 四档配置与官方对比组，`run` / `compare` 支持图片、Files 引用、JSON、工具消息与结果续接、前缀续写、附加参数；新增 `api chat|responses|messages|fim` 与 `deepseek search|fetch|files|models|balance`，成功/失败与 SSE 全事件独立落盘，支持无密钥 dry-run。缓存输入价、缓存 usage、响应 model 与高级消息历史兼容旧数据；补跑复用原始附件快照。补充官方 API 指南与离线回归测试（#36）。
 - 命名配置 `ds-official-flash` 以及 `ds-official-flash-reason-low` / `ds-official-flash-reason` / `ds-official-flash-reason-max`：走官方 DeepSeek（`providers/deepseek.json`，`https://api.deepseek.com`），模型 `deepseek-flash`；关 thinking 的一路加入 `suites/deepseek`，四档推理强度在 `suites/deepseek-official-flash-effort`。官方 provider 默认模型改为 `deepseek-flash`。
 
 ### Changed
 
+- 视频测试提示追加中文字体正常、文字清晰可读及交付前检查实际画面并自行修复的要求，其余设置不变，单次自主复测不干预（#48）。
+- 视频测试提示追加必须实际渲染并输出可播放 MP4 的交付要求，保留原文存档、独立样式和其他运行设置，单次自主复测不干预（#46）。
+- Harness 从启动时透传设备代理并脱敏认证信息；作品快照与 manifest 验收兼容运行中新建的 Python venv，保持 fixture 链接拒绝与不可变输入保护（#45）。
 - 对比汇总表在「配置」后加 `provider` 列，官方 DeepSeek 与 llmcore 同场时一眼能分开。
 
 ## [0.5.0] - 2026-09-11

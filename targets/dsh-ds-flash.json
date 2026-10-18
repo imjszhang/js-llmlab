@@ -1,0 +1,10 @@
+{
+  "name": "dsh-ds-flash",
+  "kind": "harness",
+  "harness": "deepseek-harness-write",
+  "backend": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "protocol": "anthropic-messages"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "ds-official-pro-reason-low",
+  "provider": "deepseek",
+  "model": "deepseek-v4-pro",
+  "thinking": "enabled",
+  "reasoningEffort": "low",
+  "temperature": 0.3,
+  "maxTokens": 8192
+}

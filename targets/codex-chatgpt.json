@@ -1,0 +1,10 @@
+{
+  "name": "codex-chatgpt",
+  "kind": "harness",
+  "harness": "codex-write",
+  "backend": {
+    "auth": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "low"
+  }
+}

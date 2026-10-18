@@ -8,6 +8,7 @@ import type {
   ConfigSnapshot,
   NamedConfigFile,
   Pricing,
+  ProviderEndpoints,
   ReasoningEffort,
   ResolvedConfig,
   SharedCliOptions,
@@ -65,6 +66,7 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   const timeoutMs = parseTimeoutMs(raw.timeoutMs);
   const maxRetries = parseMaxRetries(raw.maxRetries);
   const pricing = parsePricing(raw.pricing);
+  const endpoints = parseProviderEndpoints(raw.endpoints);
   if (name !== undefined) parsed.name = name;
   if (provider !== undefined) parsed.provider = provider;
   if (baseURL !== undefined) parsed.baseURL = baseURL;
@@ -77,7 +79,29 @@ export function parseNamedConfig(raw: unknown): NamedConfigFile {
   if (timeoutMs !== undefined) parsed.timeoutMs = timeoutMs;
   if (maxRetries !== undefined) parsed.maxRetries = maxRetries;
   if (pricing !== undefined) parsed.pricing = pricing;
+  if (endpoints !== undefined) parsed.endpoints = endpoints;
   return parsed;
+}
+
+/** 显式协议 baseURL；不从 provider 名称或主地址推断其他协议。 */
+export function parseProviderEndpoints(value: unknown): ProviderEndpoints | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error("endpoints 必须是协议名称到 baseURL 的对象");
+  const endpoints: ProviderEndpoints = {};
+  for (const [protocol, endpoint] of Object.entries(value)) {
+    if (protocol !== "chat-completions" && protocol !== "anthropic-messages" && protocol !== "responses") {
+      throw new Error(`不支持的 endpoints 协议：${protocol}`);
+    }
+    if (typeof endpoint !== "string" || endpoint.trim() !== endpoint || endpoint === "") {
+      throw new Error(`endpoints.${protocol} 必须是 HTTP(S) baseURL`);
+    }
+    const url = new URL(endpoint);
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "") {
+      throw new Error(`endpoints.${protocol} 必须是没有凭据、查询参数或片段的 HTTP(S) baseURL`);
+    }
+    endpoints[protocol] = endpoint;
+  }
+  return endpoints;
 }
 
 /** `timeoutMs`：> 0 的整数（毫秒）。配置文件里是数字，CLI 传字符串。 */
@@ -117,11 +141,19 @@ export function parsePricing(value: unknown): Pricing | undefined {
   if (inputPerMillion === undefined || outputPerMillion === undefined || inputPerMillion < 0 || outputPerMillion < 0) {
     throw new Error("pricing.inputPerMillion 与 pricing.outputPerMillion 必须是 ≥ 0 的数字");
   }
-  return {
+  const pricing: Pricing = {
     inputPerMillion,
     outputPerMillion,
     currency: optionalString(value.currency) ?? "CNY",
   };
+  if (value.cachedInputPerMillion !== undefined) {
+    const cached = optionalNumber(value.cachedInputPerMillion);
+    if (cached === undefined || cached < 0) {
+      throw new Error("pricing.cachedInputPerMillion 必须是 ≥ 0 的数字");
+    }
+    pricing.cachedInputPerMillion = cached;
+  }
+  return pricing;
 }
 
 export function parseThinkingMode(value: unknown): ThinkingMode | undefined {
@@ -326,6 +358,7 @@ function mergeConfig(base: NamedConfigFile, overlay: NamedConfigFile): NamedConf
   if (overlay.timeoutMs !== undefined) merged.timeoutMs = overlay.timeoutMs;
   if (overlay.maxRetries !== undefined) merged.maxRetries = overlay.maxRetries;
   if (overlay.pricing !== undefined) merged.pricing = overlay.pricing;
+  if (overlay.endpoints !== undefined) merged.endpoints = overlay.endpoints;
   return merged;
 }
 

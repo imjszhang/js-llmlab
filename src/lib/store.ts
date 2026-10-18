@@ -268,6 +268,7 @@ export class LabStore {
       cost: variant.cost,
       requestId: variant.requestId,
     };
+    if (variant.responseModel !== undefined) meta.responseModel = variant.responseModel;
     for (const file of readdirSync(variantDir)) {
       if (/^run-\d+\.md$/u.test(file)) {
         rmSync(path.join(variantDir, file));
@@ -281,6 +282,7 @@ export class LabStore {
         error: run.error,
         cost: run.cost,
         requestId: run.requestId,
+        ...(run.responseModel !== undefined ? { responseModel: run.responseModel } : {}),
       }));
       variant.runs.forEach((run, index) => {
         writeFileSync(
