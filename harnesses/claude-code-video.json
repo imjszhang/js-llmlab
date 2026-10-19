@@ -1,0 +1,12 @@
+{
+  "name": "claude-code-video",
+  "adapter": "claude-code",
+  "executable": "claude",
+  "permission": "workspace-write",
+  "execution": {
+    "fullAccess": true,
+    "proxy": "claude-shell",
+    "maxOutputBytes": 134217728,
+    "pinModelAliases": true
+  }
+}

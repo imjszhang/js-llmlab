@@ -1,0 +1,12 @@
+{
+  "name": "neural-network-video-flash-full",
+  "tasks": [
+    "neural-network-video"
+  ],
+  "targets": [
+    "cc-ds-flash-video"
+  ],
+  "repeat": 1,
+  "concurrency": 1,
+  "timeoutMs": 3600000
+}

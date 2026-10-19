@@ -1,3 +1,4 @@
+import { readReportSupplement } from "./report-supplement.ts";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -226,7 +227,7 @@ function frozenBenchmarks(root: string, ids: readonly string[]): { entries: Froz
 }
 
 /** Offline analysis reads only frozen spec/record files; original records and reports remain untouched. */
-export function buildBenchReport(root: string, ids: readonly string[], options: { pricingFile?: string; scenario?: string } = {}): BenchAnalysisReport {
+export function buildBenchReport(root: string, ids: readonly string[], options: { pricingFile?: string; scenario?: string; reviewFile?: string } = {}): BenchAnalysisReport {
   if (!ids.length) throw new Error("至少指定一个 benchmark 或 suite id");
   if (options.scenario && !options.pricingFile) throw new Error("--scenario 需要 --pricing");
   const prices = options.pricingFile ? readBenchReportPrices(options.pricingFile) : null;
@@ -234,6 +235,7 @@ export function buildBenchReport(root: string, ids: readonly string[], options: 
   if (options.scenario && !scenarios.includes(options.scenario)) throw new Error(`价格文件没有情景：${options.scenario}`);
   const selectedScenarios = options.scenario ? [options.scenario] : scenarios;
   const loaded = frozenBenchmarks(root, ids);
+  const supplement = options.reviewFile ? readReportSupplement(root, options.reviewFile, loaded.entries.map((item) => item.spec.id)) : undefined;
   const warnings = [...loaded.warnings];
   const cells: ReportCell[] = [];
   for (const { spec, records, cohort } of loaded.entries) {
@@ -249,6 +251,7 @@ export function buildBenchReport(root: string, ids: readonly string[], options: 
       if (versions.length > 1) warnings.push(`${spec.id}/${target.name} 包含不同 harness 版本，禁止作为可比汇总`);
       for (let sample = 1; sample <= spec.repeat; sample += 1) {
         const record = targetRecords.find((item) => item.sample === sample);
+        const review = supplement?.snapshot.entries.find((entry) => entry.benchmarkId === spec.id && entry.target === target.name && entry.sample === sample);
         const value = cursorService ? null : usage(record);
         const sampleMismatch = record !== undefined && targetHash(record.target) !== targetHash(target);
         if (cursorService && record?.execution.usage) warnings.push(`${spec.id}/${target.name}/${String(sample)} 的 Cursor 完整 token 用量尚未验证，忽略记录中的用量数字`);
@@ -262,6 +265,11 @@ export function buildBenchReport(root: string, ids: readonly string[], options: 
           usageSource: cursorService ? null : record?.execution.usageSource ?? null,
           nativeCost: nativeAccount ? null : record?.execution.cost ?? null,
           nativeCostSource: nativeAccount ? null : record?.execution.costSource ?? null,
+          ...(review ? { review, reviewedUsage: review.usageAlternatives.map((alternative) => ({ usage: alternative,
+            estimates: prices ? selectedScenarios.map((scenario): ReportEstimate => nativeAccount
+              ? { scenario, currency: null, lower: null, upper: null, reason: cursorService ? "native-service" : "subscription" }
+              : sampleMismatch ? { scenario, currency: null, lower: null, upper: null, reason: "snapshot-mismatch" }
+                : estimate(alternative, info.provider, info.model, prices.snapshot, scenario)) : [] })) } : {}),
           estimates: prices ? selectedScenarios.map((scenario) => {
             if (cursorService) return { scenario, currency: null, lower: null, upper: null, reason: "native-service" };
             if (nativeAccount) return { scenario, currency: null, lower: null, upper: null, reason: "subscription" };
@@ -272,6 +280,7 @@ export function buildBenchReport(root: string, ids: readonly string[], options: 
       cells.push({ cohort, benchmarkId: spec.id, task: spec.task.name, taskHash: hash(spec.task), fixtureHash: spec.fixture.hash,
         timeoutMs: spec.task.timeoutMs, repeat: spec.repeat, concurrency: spec.concurrency, targetCount: spec.targets.length,
         target: target.name, targetHash: targetHash(target), ...info, harnessVersions: versions, snapshotMismatch: mismatch,
+        ...(target.kind === "harness" && target.profile.execution ? { executionPolicy: target.profile.execution } : {}),
         metrics: summarize(attempts, prices?.snapshot ?? null, selectedScenarios), attempts });
     }
   }
@@ -325,7 +334,7 @@ export function buildBenchReport(root: string, ids: readonly string[], options: 
         metrics: summarize(group.flatMap((item) => item.attempts), prices?.snapshot ?? null, selectedScenarios) });
     }
   }
-  return { schemaVersion: 1, kind: "bench-analysis", requestedIds: [...new Set(ids)], benchmarkIds: loaded.entries.map((item) => item.spec.id),
+  return { schemaVersion: 1, kind: "bench-analysis", ...(supplement ? { supplement } : {}), requestedIds: [...new Set(ids)], benchmarkIds: loaded.entries.map((item) => item.spec.id),
     pricing: prices ? { ...prices, scenarios: selectedScenarios } : null, cohorts: loaded.cohorts, cells, balanced, warnings: [...new Set(warnings)] };
 }
 
@@ -346,6 +355,13 @@ export function renderBenchAnalysisMarkdown(report: BenchAnalysisReport): string
   }
   lines.push("", "## 条件与快照", "", "| 实验 / target | Harness / 版本 | 预算 ms | repeat / 并发 / targets | 任务 SHA-256 | fixture SHA-256 | target SHA-256 |", "| --- | --- | ---: | --- | --- | --- | --- |");
   for (const item of report.cells) lines.push(`| ${cell(item.benchmarkId)} / ${cell(item.target)} | ${cell(item.harness)} / ${cell(item.harnessVersions.map((value) => value ?? "未知").join(", ") || "未知")} | ${String(item.timeoutMs)} | ${String(item.repeat)} / ${String(item.concurrency)} / ${String(item.targetCount)} | ${item.taskHash} | ${item.fixtureHash} | ${item.targetHash} |`);
+  if (report.cells.some((item) => item.executionPolicy)) {
+    lines.push("", "## 显式执行策略", "", "| 实验 / target | 完整权限 | 代理策略 | 输出上限 bytes | 锁定模型别名 |", "| --- | --- | --- | ---: | --- |");
+    for (const item of report.cells) if (item.executionPolicy) {
+      const p = item.executionPolicy;
+      lines.push(`| ${cell(item.benchmarkId)} / ${cell(item.target)} | ${p.fullAccess ? "是" : "否"} | ${cell(p.proxy ?? "继承默认")} | ${p.maxOutputBytes ?? "默认 16777216"} | ${p.pinModelAliases ? "是" : "否"} |`);
+    }
+  }
   if (report.balanced.length) {
     lines.push("", "## 套件任务等权汇总", "", "| 套件 / target | 任务覆盖 | 可比条件 | 等权通过率 | 等权平均耗时 s | 通过 / 计划 |", "| --- | ---: | --- | ---: | ---: | ---: |");
     for (const item of report.balanced) lines.push(`| ${cell(item.cohort)} / ${cell(item.target)} | ${String(item.taskCount)}/${String(item.expectedTasks)} | ${item.comparable ? "一致" : "有差异，不作排名"} | ${item.equalTaskPassRate === null ? "-" : `${(item.equalTaskPassRate * 100).toFixed(1)}%`} | ${item.equalTaskMeanLatencyMs === null ? "-" : (item.equalTaskMeanLatencyMs / 1000).toFixed(2)} | ${String(item.metrics.grade.passed)}/${String(item.metrics.planned)} |`);
@@ -373,6 +389,24 @@ export function renderBenchAnalysisMarkdown(report: BenchAnalysisReport): string
     lines.push("", "## 原生费用记录（未用于 API 估算）", "", "Harness 原生费用可能使用其他模型定价；不同来源、币种分别保留，不视为 provider 账单。", "", "| 实验 / target | 来源 / 币种 | 有值样本 | 已知金额 |", "| --- | --- | ---: | ---: |");
     for (const item of native) for (const cost of item.metrics.nativeCosts) lines.push(`| ${cell(item.benchmarkId)} / ${cell(item.target)} | ${cell(cost.source ?? "未知")} / ${cell(cost.currency)} | ${String(cost.knownAttempts)}/${String(item.metrics.planned)} | ${cost.knownTotal.toFixed(6)} |`);
   }
+  if (report.supplement) {
+    lines.push("", "## 人工评审与用量核对", "", `附件 SHA-256：${report.supplement.sha256}。评审不改变自动验收；核对用量单独估算，不覆盖原始用量或混入汇总费用。证据路径仅作引用，不执行或自动读取。`, "");
+    for (const item of report.cells) for (const attempt of item.attempts) {
+      const review = attempt.review;
+      if (!review) continue;
+      lines.push(`### ${cell(attempt.benchmarkId)} / ${cell(attempt.target)} / ${attempt.sample}`, "",
+        `评审：${cell(review.verdict)}；${cell(review.reviewer || "未填写")} / ${review.method} / ${cell(review.reviewedAt || "未填写")}。`, "", cell(review.notes), "");
+      for (const score of review.scores) lines.push(`- ${cell(score.dimension)}：${score.score}/${score.max}`);
+      for (const evidence of review.evidence) lines.push(`- 证据：${cell(evidence)}`);
+      for (const alternative of attempt.reviewedUsage ?? []) {
+        const u = alternative.usage;
+        lines.push("", `核对口径 ${cell(u.label)}（${cell(u.source)}）：输入 ${u.promptTokens}，输出 ${u.completionTokens}，缓存命中 ${u.promptCacheHitTokens ?? "未知"}。`, "");
+        for (const estimate of alternative.estimates) lines.push(`- ${cell(estimate.scenario)} / ${cell(estimate.currency ?? "未知")}：${estimate.lower === null || estimate.upper === null ? "未知" : moneyRange({ lower: estimate.lower, upper: estimate.upper })}（${estimate.reason}）`);
+      }
+      lines.push("");
+    }
+  }
+  if (report.supplement) while (lines.at(-1) === "") lines.pop();
   if (report.warnings.length) lines.push("", "## 提示", "", ...report.warnings.map((warning) => `- ${cell(warning)}`));
   return `${lines.join("\n")}\n`;
 }
@@ -399,5 +433,19 @@ export function renderBenchAnalysisCsv(report: BenchAnalysisReport): string {
       ...(hasNativeAuth ? [item.auth ?? "api-key"] : [])]);
   }
   if (hasNativeAuth) rows[0]?.push("auth");
+  if (report.cells.some((item) => item.executionPolicy)) {
+    rows[0]?.push("executionPolicyJson");
+    let index = 1;
+    for (const item of report.cells) for (let i = 0; i < Math.max(1, item.metrics.estimatedCosts.length); i += 1) rows[index++]?.push(item.executionPolicy ? JSON.stringify(item.executionPolicy) : null);
+  }
+  if (report.supplement) {
+    rows[0]?.push("reviewsJson", "reviewedUsageJson");
+    let index = 1;
+    for (const item of report.cells) {
+      for (let i = 0; i < Math.max(1, item.metrics.estimatedCosts.length); i += 1) rows[index++]?.push(
+        JSON.stringify(item.attempts.flatMap((a) => a.review ? [a.review] : [])),
+        JSON.stringify(item.attempts.flatMap((a) => a.reviewedUsage ? [{ sample: a.sample, alternatives: a.reviewedUsage }] : [])));
+    }
+  }
   return `${rows.map((row) => row.map(csv).join(",")).join("\n")}\n`;
 }

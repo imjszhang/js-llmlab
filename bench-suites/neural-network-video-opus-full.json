@@ -1,0 +1,12 @@
+{
+  "name": "neural-network-video-opus-full",
+  "tasks": [
+    "neural-network-video"
+  ],
+  "targets": [
+    "cc-opus-5-5-video"
+  ],
+  "repeat": 1,
+  "concurrency": 1,
+  "timeoutMs": 3600000
+}

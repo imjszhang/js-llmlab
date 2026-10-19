@@ -133,3 +133,42 @@ test("parsers reject truncated streams, malformed events, terminal failures and 
   assert.match(codex.error ?? "", /backend unavailable/u);
   assert.equal(parseHarnessOutput("codex", output([{ type: "error", message: "bad" }, { type: "turn.completed" }])).status, "failed");
 });
+
+test("video policy is explicit, pins aliases and raises only main invocation log limit", () => {
+  const t = target("claude-code");
+  const ordinary = planHarness(t, context);
+  t.profile.execution = { fullAccess: true, proxy: "claude-shell", maxOutputBytes: 134217728, pinModelAliases: true };
+  const plan = planHarness(t, context);
+  assert.equal(plan.process.maxOutputBytes, 134217728);
+  assert.equal(plan.process.timeoutMs, context.timeoutMs);
+  assert.ok(plan.process.args.includes("--dangerously-skip-permissions"));
+  assert.ok(!plan.process.args.includes("--bare"));
+  assert.ok(!plan.process.args.includes("--restricted"));
+  assert.ok(!plan.process.args.includes("--allowedTools"));
+  assert.ok(plan.process.args.includes("--safe-mode"));
+  assert.equal(plan.process.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL, "test-model");
+  assert.equal(JSON.parse(plan.files[0]?.content ?? "").sandbox.enabled, false);
+  assert.ok(plan.files.some((file) => file.path === plan.process.env?.CLAUDE_ENV_FILE));
+  assert.equal(ordinary.process.maxOutputBytes, undefined);
+  assert.ok(!ordinary.process.args.includes("--dangerously-skip-permissions"));
+  assert.throws(() => planHarness({ ...t, profile: { ...t.profile, permission: "read-only" } }, context), /fullAccess/u);
+});
+
+test("Cursor video policy is opt-in and leaves native billing unknown", () => {
+  const t: ResolvedHarnessTarget = { name: "cursor-video", kind: "harness",
+    definition: { name: "cursor-video", kind: "harness", harness: "cursor-video", backend: { auth: "cursor-api-key", model: "native-model" } },
+    backend: { auth: "cursor-api-key", apiKeyEnv: "CURSOR_API_KEY", model: "native-model" },
+    profile: { name: "cursor-video", adapter: "cursor-agent", executable: "cursor-agent", permission: "workspace-write", execution: { fullAccess: true, proxy: "inherit", maxOutputBytes: 134217728 } } };
+  const plan = planHarness(t, context);
+  assert.ok(plan.process.args.includes("--force"));
+  assert.equal(plan.process.args[plan.process.args.indexOf("--sandbox") + 1], "disabled");
+  assert.ok(!plan.process.args.includes("--allowed-tools"));
+  assert.equal(plan.process.maxOutputBytes, 134217728);
+  const config = JSON.parse(plan.files.find((f) => f.path.endsWith("cli-config.json"))?.content ?? "");
+  assert.deepEqual(config.permissions.deny, ["Mcp(*:*)"]);
+  assert.equal(config.sandbox.mode, "disabled");
+  delete t.profile.execution;
+  const ordinary = planHarness(t, context);
+  assert.ok(!ordinary.process.args.includes("--force"));
+  assert.equal(ordinary.process.args[ordinary.process.args.indexOf("--sandbox") + 1], "enabled");
+});

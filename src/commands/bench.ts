@@ -1,3 +1,4 @@
+import { reviewTemplate } from "../lib/bench/report-supplement.ts";
 import type { Command } from "commander";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -104,13 +105,14 @@ export async function runTasksValidate(name: string | undefined, all: boolean, d
   return passed;
 }
 
-export type BenchReportOptions = { pricing?: string; scenario?: string; format?: string; output?: string };
+export type BenchReportOptions = { review?: string; pricing?: string; scenario?: string; format?: string; output?: string };
 
 export function runBenchReport(ids: readonly string[], options: BenchReportOptions = {}, deps: BenchCommandDeps = {}): void {
   const format = options.format ?? "markdown";
   if (format !== "markdown" && format !== "json" && format !== "csv") throw new Error("--format 只能是 markdown、json 或 csv");
   if (ids.length === 0) throw new Error("至少提供一个 b_… 或 e_… 实验 ID");
   const report = buildBenchReport(deps.root ?? findProjectRoot(), ids, {
+    ...(options.review === undefined ? {} : { reviewFile: options.review }),
     ...(options.pricing === undefined ? {} : { pricingFile: options.pricing }),
     ...(options.scenario === undefined ? {} : { scenario: options.scenario }),
   });
@@ -187,7 +189,14 @@ export function registerBenchCommands(program: Command): void {
     });
   bench.command("ls").action(() => runBenchLs());
   bench.command("show <id>").action((id: string) => runBenchShow(id));
+  bench.command("review-template <id>").description("生成绑定冻结记录的人工评审/用量核对模板")
+    .requiredOption("--output <file>", "新 JSON 文件，拒绝覆盖")
+    .action((id: string, options: { output: string }) => {
+      const template = reviewTemplate(findProjectRoot(), id);
+      writeFileSync(path.resolve(options.output), JSON.stringify(template, null, 2) + "\n", { flag: "wx" });
+    });
   bench.command("report <ids...>").description("离线汇总实验组或旧实验，不修改原记录")
+    .option("--review <file>", "绑定记录指纹的人工评审及用量核对 JSON")
     .option("--pricing <file>", "用户维护的价格 JSON；不使用 harness 报价估算后端费用")
     .option("--scenario <name>", "显式价格情景，例如 offPeak；缺省列出全部情景")
     .option("--format <kind>", "markdown、json 或 csv", "markdown")

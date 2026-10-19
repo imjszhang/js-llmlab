@@ -330,3 +330,32 @@ test("harness waits for timed-out process cleanup and retains partial output", a
     });
   } finally { await rm(context.root, { recursive: true, force: true }); }
 });
+
+test("formal video policy reaches actual runner, writes proxy shell safely, and redacts quoted credentials", async () => {
+  const t = harness("claude-code");
+  t.profile.execution = { fullAccess: true, proxy: "claude-shell", maxOutputBytes: 134217728, pinModelAliases: true };
+  const context = await input(t);
+  try {
+    await withEnvAsync({ BENCH_TEST_API_KEY: "video-fake-key", HTTPS_PROXY: "http://user:pa'ss@proxy.test:8080" }, async () => {
+      const result = await executeTarget(context, { runProcess: async (request) => {
+        if (request.args.includes("--version")) {
+          assert.equal(request.maxOutputBytes, undefined);
+          return processResult("2.1.296");
+        }
+        assert.ok(request.args.includes("--dangerously-skip-permissions"));
+        assert.equal(request.maxOutputBytes, 134217728);
+        assert.ok(request.timeoutMs <= context.task.timeoutMs);
+        assert.equal(request.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL, "backend-model");
+        const file = request.env?.CLAUDE_ENV_FILE; assert.ok(file);
+        const shell = await readFile(file, "utf8");
+        assert.ok(shell.includes("pa'\\''ss"));
+        return processResult(JSON.stringify({ type: "result", subtype: "success", result: "done" }));
+      } });
+      assert.equal(result.status, "completed");
+      const raw = JSON.stringify(result.raw);
+      assert.ok(!raw.includes("video-fake-key"));
+      assert.ok(!raw.includes("pa'ss"));
+      assert.ok(!raw.includes("pa'\\\\''ss"));
+    });
+  } finally { await rm(context.root, { recursive: true, force: true }); }
+});

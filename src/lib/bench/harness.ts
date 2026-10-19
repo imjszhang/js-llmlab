@@ -1,4 +1,5 @@
 import path from "node:path";
+import { applyExecutionPolicy } from "./execution-policy.ts";
 import type { TokenUsage } from "../../types.ts";
 import type { ExecutionEvent, HarnessAdapter, HarnessContext, HarnessPlan, ParsedHarnessResult, ProcessResult, ResolvedHarnessTarget } from "./types.ts";
 import { planDeepSeekHarness, parseDeepSeekHarnessOutput } from "./adapters/deepseek-harness.ts";
@@ -9,6 +10,10 @@ import { parseCursorOutput } from "./adapters/cursor-output.ts";
 
 /** Build a reproducible invocation without reading auth, changing the parent environment, or writing files. */
 export function planHarness(target: ResolvedHarnessTarget, context: HarnessContext, apiKey?: string): HarnessPlan {
+  return applyExecutionPolicy(target, context, basePlanHarness(target, context, apiKey));
+}
+
+function basePlanHarness(target: ResolvedHarnessTarget, context: HarnessContext, apiKey?: string): HarnessPlan {
   if (target.backend.auth === "cursor-login" || target.backend.auth === "cursor-api-key") {
     if (target.profile.adapter !== "cursor-agent") throw new Error("Cursor native backend requires Cursor Agent");
     return planCursorAgent({ ...target, backend: target.backend }, context, apiKey);
