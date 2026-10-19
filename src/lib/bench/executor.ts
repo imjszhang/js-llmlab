@@ -31,7 +31,9 @@ export function executionSecrets(apiKeyEnv: string | undefined): string[] {
     const value = process.env[name];
     return value === undefined || value === "" ? [] : [value];
   });
-  return [...new Set([...credentials, ...proxySecrets()])].sort((left, right) => right.length - left.length);
+  const values = [...credentials, ...proxySecrets()];
+  // Shell-quoted proxy URLs can contain split single quotes in CLAUDE_ENV_FILE.
+  return [...new Set([...values, ...values.map((value) => value.replaceAll("'", "'\\''"))])].sort((left, right) => right.length - left.length);
 }
 
 export function redactExecutionValue(value: unknown, secrets: readonly string[]): unknown {

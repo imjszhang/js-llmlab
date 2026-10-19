@@ -416,3 +416,9 @@ npm run typecheck
 改动走 issue → 分支 → PR → CI，流程与验收要求见 `AGENTS.md` 的「工程流程」；变更记录在 `CHANGELOG.md`。
 
 Cursor 代理网络：预置 profile 使用 HTTP/1.1 SSE（`useHttp1ForAgent: true`），并让原生请求及 shell 继承标准代理变量；不会关闭 TLS 校验。另设置 `nativeStallTimeoutMs: 300000`，通过版本及原始文件 SHA-256 校验后的本地内存补丁，放宽原生 30 秒无完整消息的等待时间，防止大图片仍在传输时被反复重连；总任务时限不变，安装文件不改动。配置与兼容补丁进入运行快照，旧 profile 缺省此字段不启用补丁。预置 profile 还显式保留原生登录所需的本机 HOME，配置/数据及工具 shell 继续隔离；原生可能加载本机上下文。边界与自主视频实验的单次运行配置见 [harness 说明](docs/harness-bench.md)。
+
+### 视频实验正式配置与评审
+
+使用 `neural-network-video-flash-full` / `neural-network-video-opus-full` / `neural-network-video-cursor-full` 套件：完整权限、60 分钟、128 MiB 日志上限、显式代理策略，每次只跑一个样本。先 `bench run --suite <name> --dry-run` 检查配置；普通 profile 和旧套件不变。
+
+`bench review-template <b_id> --output <新JSON>` 生成绑定历史记录指纹的评审模板；填写后通过 `bench report <b_id...> --review <JSON> [--pricing <JSON> --scenario <name>]` 同时展示人工评审和成本核对。自动验收、原始用量/费用与核对口径保持分开，旧记录无需迁移。完整权限范围、附件格式和命令见 [视频实验说明](docs/video-experiments.md)。

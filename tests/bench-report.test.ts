@@ -300,3 +300,101 @@ test("analysis markdown and CSV preserve unknown costs, conditions, native sourc
   assertMatchesGolden("bench-analysis.md", renderBenchAnalysisMarkdown(report));
   assertMatchesGolden("bench-analysis.csv", renderBenchAnalysisCsv(report));
 });
+
+test("review supplement binds frozen bytes, keeps grades/raw costs, and estimates alternative usage separately", async () => {
+  const { reviewTemplate } = await import("../src/lib/bench/report-supplement.ts");
+  const root = makeLabRoot();
+  const s = spec(undefined, undefined, 1);
+  store(root, s, [record(s, 1)]);
+  const template = reviewTemplate(root, s.id);
+  const review = template.entries[0];
+  assert.ok(review);
+  Object.assign(review, { reviewer: "reviewer", method: "agent-assisted", reviewedAt: "2026-10-19", verdict: "needs-work", notes: "Frames inspected; audio not checked", evidence: ["manual-review/contact-sheet.jpg"] });
+  review.scores = [{ dimension: "readability", score: 3, max: 5 }];
+  review.usageAlternatives = [{ label: "native-modelUsage", source: "result.modelUsage.model-a", promptTokens: 200, completionTokens: 40, totalTokens: 240, promptCacheHitTokens: 160 }];
+  const reviewFile = path.join(root, "review.json");
+  writeJson(reviewFile, template);
+  const baseline = buildBenchReport(root, [s.id], { pricingFile: prices(root) });
+  const report = buildBenchReport(root, [s.id], { pricingFile: prices(root), reviewFile });
+  assert.deepEqual(report.cells[0]?.metrics, baseline.cells[0]?.metrics);
+  const attempt = report.cells[0]?.attempts[0];
+  assert.equal(attempt?.passed, true);
+  assert.equal(attempt?.review?.verdict, "needs-work");
+  assert.equal(attempt?.nativeCost?.total, 55);
+  assert.equal(attempt?.reviewedUsage?.[0]?.estimates[0]?.lower, 0.000512);
+  assert.match(renderBenchAnalysisMarkdown(report), /人工评审与用量核对/u);
+  assert.match(renderBenchAnalysisCsv(report), /reviewedUsageJson/u);
+  assert.equal(report.supplement?.sha256.length, 64);
+  assertMatchesGolden("bench-analysis-review.md", renderBenchAnalysisMarkdown(report));
+  assertMatchesGolden("bench-analysis-review.csv", renderBenchAnalysisCsv(report));
+  writeJson(path.join(sampleDir(benchmarkDir(root, s.id), "agent", 1), "record.json"), record(s, 1, false));
+  assert.throws(() => buildBenchReport(root, [s.id], { reviewFile }), /指纹不匹配/u);
+});
+
+test("review supplement rejects duplicate, impossible usage and unbound entries", async () => {
+  const { reviewTemplate } = await import("../src/lib/bench/report-supplement.ts");
+  const root = makeLabRoot(); const s = spec(undefined, undefined, 1);
+  store(root, s, [record(s, 1)]);
+  const template = reviewTemplate(root, s.id); const entry = template.entries[0]; assert.ok(entry);
+  const file = path.join(root, "review.json");
+  writeJson(file, { ...template, entries: [entry, entry] });
+  assert.throws(() => buildBenchReport(root, [s.id], { reviewFile: file }), /重复评审/u);
+  Object.assign(entry, { reviewer: "R", reviewedAt: "2026-10-19", evidence: ["audit.json"], usageAlternatives: [{ label: "bad", source: "audit", promptTokens: 10, completionTokens: 20, totalTokens: 30, promptCacheHitTokens: 11 }] });
+  writeJson(file, template);
+  assert.throws(() => buildBenchReport(root, [s.id], { reviewFile: file }), /无效核对用量/u);
+});
+
+test("reviewed usage cannot turn native subscriptions or Cursor into API-priced runs", async () => {
+  const { reviewTemplate } = await import("../src/lib/bench/report-supplement.ts");
+  for (const auth of ["cursor-login", "claude-subscription", "chatgpt"] as const) {
+    const root = makeLabRoot(); const s = spec(undefined, undefined, 1);
+    const adapter = auth === "cursor-login" ? "cursor-agent" : auth === "chatgpt" ? "codex" : "claude-code";
+    const backend = auth === "chatgpt" ? { auth, model: "model-a", codexHome: "/native", credentialsStore: "auto" as const }
+      : auth === "claude-subscription" ? { auth, model: "model-a", claudeConfigDir: "/native", claudeConfigDirMode: "explicit" as const }
+        : { auth, model: "model-a" };
+    s.targets = [{ name: "agent", kind: "harness", profile: { name: adapter, adapter, executable: adapter, permission: "workspace-write" },
+      definition: { name: "agent", kind: "harness", harness: adapter, backend }, backend }];
+    store(root, s, [record(s, 1)]);
+    const template = reviewTemplate(root, s.id); const entry = template.entries[0]; assert.ok(entry);
+    Object.assign(entry, { reviewer: "R", reviewedAt: "2026-10-19", evidence: ["audit.json"] });
+    entry.usageAlternatives = [{ label: "audit", source: "raw", promptTokens: 10, completionTokens: 5, totalTokens: 15 }];
+    const file = path.join(root, "review.json"); writeJson(file, template);
+    if (auth === "cursor-login") {
+      assert.throws(() => buildBenchReport(root, [s.id], { reviewFile: file, pricingFile: prices(root) }), /Cursor 完整用量/u);
+      continue;
+    }
+    const report = buildBenchReport(root, [s.id], { reviewFile: file, pricingFile: prices(root) });
+    const attempt = report.cells[0]?.attempts[0];
+    assert.equal(attempt?.reviewedUsage?.[0]?.estimates[0]?.lower, null);
+    assert.equal(attempt?.reviewedUsage?.[0]?.estimates[0]?.reason, "subscription");
+    assert.equal(attempt?.nativeCost, null);
+  }
+});
+
+test("new execution policies are visible from frozen snapshots without consulting current profile files", () => {
+  const root = makeLabRoot(); const s = spec(undefined, undefined, 1);
+  const t = s.targets[0]; assert.ok(t?.kind === "harness");
+  t.profile.execution = { fullAccess: true, proxy: "claude-shell", maxOutputBytes: 134217728, pinModelAliases: true };
+  store(root, s, [record(s, 1)]);
+  const report = buildBenchReport(root, [s.id]);
+  assert.equal(report.cells[0]?.executionPolicy?.maxOutputBytes, 134217728);
+  assert.match(renderBenchAnalysisMarkdown(report), /显式执行策略/u);
+  assert.match(renderBenchAnalysisCsv(report), /executionPolicyJson/u);
+});
+
+test("review validation does not coerce enum arrays or allow usage audits to authorize unreviewed scores", async () => {
+  const { reviewTemplate } = await import("../src/lib/bench/report-supplement.ts");
+  const root = makeLabRoot(); const s = spec(undefined, undefined, 1);
+  store(root, s, [record(s, 1)]);
+  const template = reviewTemplate(root, s.id); const entry = template.entries[0]; assert.ok(entry);
+  const file = path.join(root, "review.json");
+  for (const invalid of [{ method: ["human"] }, { verdict: ["accepted"] }]) {
+    writeJson(file, { ...template, entries: [{ ...entry, ...invalid }] });
+    assert.throws(() => buildBenchReport(root, [s.id], { reviewFile: file }), /无效评审/u);
+  }
+  Object.assign(entry, { reviewer: "R", reviewedAt: "2026-10-19", evidence: ["audit.json"] });
+  entry.usageAlternatives = [{ label: "audit", source: "raw", promptTokens: 10, completionTokens: 5, totalTokens: 15 }];
+  entry.scores = [{ dimension: "visual", score: 5, max: 5 }];
+  writeJson(file, template);
+  assert.throws(() => buildBenchReport(root, [s.id], { reviewFile: file }), /未评审条目不能包含评分/u);
+});

@@ -1,4 +1,5 @@
-import type { BenchCost } from "./types.ts";
+import type { ReportReview, ReviewedUsage, ReportSupplement } from "./report-supplement.ts";
+import type { BenchCost, HarnessProfile } from "./types.ts";
 
 export type ReportRate = { inputPerMillion: number; cachedInputPerMillion?: number; outputPerMillion: number };
 export type ReportPrices = {
@@ -28,6 +29,8 @@ export type ReportAttempt = {
   nativeCost: BenchCost | null;
   nativeCostSource: string | null;
   estimates: ReportEstimate[];
+  review?: ReportReview;
+  reviewedUsage?: Array<{ usage: ReviewedUsage; estimates: ReportEstimate[] }>;
 };
 export type ReportMoney = {
   scenario: string;
@@ -74,6 +77,7 @@ export type ReportCell = {
   harness: string;
   harnessVersions: Array<string | null>;
   snapshotMismatch: boolean;
+  executionPolicy?: NonNullable<HarnessProfile["execution"]>;
   metrics: ReportMetrics;
   attempts: ReportAttempt[];
 };
@@ -104,4 +108,5 @@ export type BenchAnalysisReport = {
   cells: ReportCell[];
   balanced: ReportBalanced[];
   warnings: string[];
+  supplement?: { sha256: string; snapshot: ReportSupplement };
 };

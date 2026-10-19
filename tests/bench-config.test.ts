@@ -149,3 +149,21 @@ test("provider endpoints are explicit HTTP protocol bases and cannot embed secre
     assert.throws(() => parseNamedConfig({ endpoints }));
   }
 });
+
+test("execution policy validates bounds and adapter capabilities without changing old defaults", () => {
+  const root = setup();
+  assert.equal(loadHarness(root, "cc").execution, undefined);
+  const base = { name: "video", adapter: "claude-code", executable: "claude", permission: "workspace-write" };
+  const file = path.join(root, "harnesses", "video.json");
+  for (const execution of [{ maxOutputBytes: 0 }, { maxOutputBytes: 134217729 }, { maxOutputBytes: 1.5 }, { proxy: "unknown" }, { typo: true }, { fullAccess: "true" }]) {
+    writeJson(file, { ...base, execution });
+    assert.throws(() => loadHarness(root, "video"));
+  }
+  writeJson(file, { ...base, execution: { fullAccess: true, maxOutputBytes: 134217728, proxy: "claude-shell" } });
+  assert.equal(loadHarness(root, "video").execution?.maxOutputBytes, 134217728);
+  writeJson(file, { ...base, adapter: "codex", execution: { fullAccess: true } });
+  assert.throws(() => loadHarness(root, "video"), /fullAccess/u);
+  writeJson(file, { ...base, execution: { fullAccess: true } });
+  writeJson(path.join(root, "targets", "subscription-video.json"), { name: "subscription-video", kind: "harness", harness: "video", backend: { auth: "claude-subscription", model: "opus" } });
+  assert.throws(() => resolveTarget(root, "subscription-video"), /订阅不支持/u);
+});

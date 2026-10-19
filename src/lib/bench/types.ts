@@ -12,6 +12,13 @@ export type HarnessProfile = {
   adapter: HarnessAdapter;
   executable: string;
   permission: "read-only" | "workspace-write";
+  /** Explicit opt-in; missing preserves legacy permissions and process limits. */
+  execution?: {
+    fullAccess?: boolean;
+    proxy?: "inherit" | "claude-shell";
+    maxOutputBytes?: number;
+    pinModelAliases?: boolean;
+  };
   /** Cursor's native HTTP/1.1 SSE transport; absent preserves native default. */
   useHttp1ForAgent?: boolean;
   /** Version/hash-pinned local compatibility for slow native image messages. */

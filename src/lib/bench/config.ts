@@ -127,6 +127,30 @@ export function loadHarness(root: string, name: string): HarnessProfile {
     }
     profile.useCurrentUserHomeForLogin = raw.useCurrentUserHomeForLogin;
   }
+  if (raw.execution !== undefined) {
+    const e = raw.execution;
+    if (typeof e !== "object" || e === null || Array.isArray(e)) throw new Error("execution 必须是对象");
+    const value = e as Record<string, unknown>;
+    for (const key of Object.keys(value)) if (!["fullAccess", "proxy", "maxOutputBytes", "pinModelAliases"].includes(key)) throw new Error(`未知 execution 字段：${key}`);
+    const policy: NonNullable<HarnessProfile["execution"]> = {};
+    for (const key of ["fullAccess", "pinModelAliases"] as const) {
+      if (value[key] !== undefined) {
+        if (typeof value[key] !== "boolean") throw new Error(`${key} 必须为 boolean`);
+        policy[key] = value[key];
+      }
+    }
+    if (policy.fullAccess && (profile.permission !== "workspace-write" || !["claude-code", "cursor-agent"].includes(profile.adapter))) throw new Error("fullAccess 仅支持可写 Claude Code / Cursor profile");
+    if (value.proxy !== undefined) {
+      if (value.proxy !== "inherit" && value.proxy !== "claude-shell") throw new Error("proxy 只能是 inherit 或 claude-shell");
+      policy.proxy = value.proxy;
+    }
+    if ((policy.proxy === "claude-shell" || policy.pinModelAliases) && profile.adapter !== "claude-code") throw new Error("claude-shell / pinModelAliases 仅支持 Claude Code");
+    if (value.maxOutputBytes !== undefined) {
+      if (typeof value.maxOutputBytes !== "number" || !Number.isSafeInteger(value.maxOutputBytes) || value.maxOutputBytes < 1024 || value.maxOutputBytes > 134217728) throw new Error("maxOutputBytes 必须为 1024–134217728 整数");
+      policy.maxOutputBytes = value.maxOutputBytes;
+    }
+    profile.execution = policy;
+  }
   return profile;
 }
 
@@ -395,6 +419,7 @@ export function resolveTargetDefinition(root: string, definition: Target): Resol
     };
   }
   if (isClaudeSubscriptionBackend(definition.backend)) {
+    if (profile.execution?.fullAccess || profile.execution?.proxy === "claude-shell" || profile.execution?.pinModelAliases) throw new Error("Claude 订阅不支持 API 视频执行扩展；使用原订阅 profile");
     if (profile.adapter !== "claude-code") throw new Error("claude-subscription backend 仅支持 claude-code harness");
     if (definition.backend.claudeConfigDir === undefined && process.env.CLAUDE_CONFIG_DIR
       && !path.isAbsolute(process.env.CLAUDE_CONFIG_DIR)) {

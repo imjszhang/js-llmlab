@@ -1,0 +1,9 @@
+{
+  "name": "cursor-opus-5-5-high-video",
+  "kind": "harness",
+  "harness": "cursor-agent-video",
+  "backend": {
+    "auth": "cursor-login",
+    "model": "claude-opus-5-5-high"
+  }
+}
